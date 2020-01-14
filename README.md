@@ -33,7 +33,7 @@ personInstanceId=#######
 releaseNumber=##
 ```
 
-Once the file has been properly populated, the program can be run via <a href="https://github.com/reactome/data-release-pipeline/blob/feature/update-stable-ids/updateStableIds/runUpdateStableIds.sh">runUpdateStableIds.sh</a>.
+Once the file has been properly populated, the program can be run via <a href="https://github.com/reactome/release-update-stable-ids/blob/develop/runUpdateStableIds.sh">runUpdateStableIds.sh</a>.
 
 <h4> Checking UpdateStableIdentifiers </h4>
 
