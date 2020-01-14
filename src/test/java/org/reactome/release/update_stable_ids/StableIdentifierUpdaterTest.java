@@ -1,29 +1,21 @@
-package org.reactome.release.updateStableIds;
+package org.reactome.release.update_stable_ids;
 
 import org.gk.model.GKInstance;
 import org.gk.persistence.MySQLAdaptor;
 import org.gk.schema.SchemaClass;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import static org.mockito.Matchers.anyInt;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import static org.mockito.Mockito.when;
 import org.mockito.MockitoAnnotations;
-import org.mockito.internal.matchers.Null;
 import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.reactome.release.common.database.InstanceEditUtils;
 import org.powermock.modules.junit4.PowerMockRunner;
 
-import java.sql.SQLException;
 import java.util.*;
-
-import static org.junit.Assert.*;
 
 
 @RunWith(PowerMockRunner.class)

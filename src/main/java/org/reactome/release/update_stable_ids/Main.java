@@ -1,4 +1,4 @@
-package org.reactome.release.updateStableIds;
+package org.reactome.release.update_stable_ids;
 
 import java.io.FileInputStream;
 import java.sql.SQLException;
@@ -10,26 +10,26 @@ import org.gk.persistence.MySQLAdaptor;
 
 /**
  * This function iterates through all instances, and checks if it has been changed since the previous release.
- * Instances that have been changed have their 'identifierVersion' attribute incremented by 1 to reflect a change. 
+ * Instances that have been changed have their 'identifierVersion' attribute incremented by 1 to reflect a change.
  *
  */
-public class Main 
+public class Main
 {
 	private static final Logger logger = LogManager.getLogger();
-	
+
     public static void main( String[] args ) throws Exception
     {
     	logger.info("Beginning UpdateStableIds step...");
-       
+
     	String pathToConfig = "";
     	if (args.length > 0) {
     		pathToConfig = args[0];
     	} else {
     		pathToConfig = "src/main/resources/config.properties";
     	}
-       
+
 	System.out.println(pathToConfig);
-       //Sets up the various DB Adaptors needed. This includes the current and previous test_slice versions on the release server, 
+       //Sets up the various DB Adaptors needed. This includes the current and previous test_slice versions on the release server,
        //as well as gk_central on the curation server.
        Properties props = new Properties();
        props.load(new FileInputStream(pathToConfig));
@@ -40,10 +40,10 @@ public class Main
        MySQLAdaptor dbaSlice = createDatabaseAdaptor(props, "release.database.user", "release.database.password", "release.database.host","slice_current.name", "release.database.port");
        MySQLAdaptor dbaPrevSlice = createDatabaseAdaptor(props, "release.database.user", "release.database.password", "release.database.host","slice_previous.name", "release.database.port");
        MySQLAdaptor dbaGkCentral = createDatabaseAdaptor(props, "curator.database.user", "curator.database.password", "curator.database.host", "curator.database.name", "curator.database.port");
-       
+
        long personId = Long.parseLong(props.getProperty("personId"));
        StableIdentifierUpdater.updateStableIdentifiers(dbaSlice, dbaPrevSlice, dbaGkCentral, personId);
- 
+
 
        logger.info("Finished UpdateStableIds step");
 ;    }

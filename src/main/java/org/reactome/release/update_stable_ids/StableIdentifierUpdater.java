@@ -1,4 +1,4 @@
-package org.reactome.release.updateStableIds;
+package org.reactome.release.update_stable_ids;
 
 import static org.gk.model.ReactomeJavaConstants.*;
 
@@ -17,7 +17,7 @@ public class StableIdentifierUpdater {
 
 	@SuppressWarnings("unchecked")
 	public static void updateStableIdentifiers(MySQLAdaptor dbaSlice, MySQLAdaptor dbaPrevSlice, MySQLAdaptor dbaGkCentral, Long personId) throws Exception {
-		
+
 		logger.info("Generating InstanceEdits for " + dbaSlice.getDBName() + " and " + dbaGkCentral.getDBName());
 		// Instance Edits for test_slice and gk_central
 		String creatorName = "org.reactome.release.updateStableIds";
@@ -50,7 +50,7 @@ public class StableIdentifierUpdater {
 			GKInstance prevSliceInstance = dbaPrevSlice.fetchInstance(sliceInstance.getDBID());
 			// Check if instance is new and that it exists on gkCentral (they could be deleted)
 			if (prevSliceInstance != null && gkCentralInstance != null) {
-				
+
 				// Compare number of 'Modified' instances between slices
 				Collection<GKInstance> sliceInstanceModified = sliceInstance.getAttributeValuesList(modified);
 				Collection<GKInstance> prevSliceInstanceModified = prevSliceInstance.getAttributeValuesList(modified);
@@ -125,11 +125,11 @@ public class StableIdentifierUpdater {
 		dba.updateInstanceAttribute(stableIdentifierInst, _displayName);
 		dba.updateInstanceAttribute(stableIdentifierInst, modified);
 	}
-	
+
 	// Checks via the 'releaseStatus', 'revised', and 'reviewed' attributes if this instance has been updated since last release.
 	// Also goes through any child 'hasEvent' instances and recursively checks as well.
 	private static boolean isUpdated(GKInstance sliceInstance, GKInstance prevSliceInstance, MySQLAdaptor dbaPrevSlice) throws InvalidAttributeException, Exception {
-		
+
 		if (sliceInstance.getSchemClass().isa(Event)) {
 			if (sliceInstance.getAttributeValue(releaseStatus) != null) {
 				return true;
@@ -137,17 +137,17 @@ public class StableIdentifierUpdater {
 
 			Collection<GKInstance> revisedInstances = sliceInstance.getAttributeValuesList(revised);
 			Collection<GKInstance> prevRevisedInstances = prevSliceInstance.getAttributeValuesList(revised);
-			
+
 			if (revisedInstances.size() > prevRevisedInstances.size()) {
 				return true;
 			}
-			
+
 			Collection<GKInstance> reviewedInstances = sliceInstance.getAttributeValuesList(reviewed);
 			Collection<GKInstance> prevReviewedInstances = prevSliceInstance.getAttributeValuesList(reviewed);
 			if (reviewedInstances.size() > prevReviewedInstances.size()) {
 				return true;
 			}
-			
+
 			if (sliceInstance.getSchemClass().isValidAttribute(hasEvent)) {
 				Collection<GKInstance> eventInstances = sliceInstance.getAttributeValuesList(hasEvent);
 				for (GKInstance eventInst : eventInstances) {
@@ -161,7 +161,7 @@ public class StableIdentifierUpdater {
 						e.printStackTrace();
 					}
 				}
-			}		
+			}
 		}
 		return false;
 	}
