@@ -1,0 +1,6 @@
+logs/
+target/
+
+# Ignore IntelliJ files
+.idea/
+update-stable-ids.iml
