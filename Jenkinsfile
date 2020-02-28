@@ -50,12 +50,10 @@ pipeline {
 		stage('Setup: Back up Curator gk_central DB'){
 			steps{
 				script{
-					dir('update-stable-ids'){
-						withCredentials([usernamePassword(credentialsId: 'mySQLCuratorUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
-							def central_before_update_stable_ids_dump = "${env.GK_CENTRAL}_${currentRelease}_before_st_id.dump"
-							sh "mysqldump -u$user -p$pass -h${env.CURATOR_SERVER} ${env.GK_CENTRAL} > $central_before_update_stable_ids_dump"
-							sh "gzip -f $central_before_update_stable_ids_dump"
-						}
+					withCredentials([usernamePassword(credentialsId: 'mySQLCuratorUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
+						def central_before_update_stable_ids_dump = "${env.GK_CENTRAL}_${currentRelease}_before_st_id.dump"
+						sh "mysqldump -u$user -p$pass -h${env.CURATOR_SERVER} ${env.GK_CENTRAL} > $central_before_update_stable_ids_dump"
+						sh "gzip -f $central_before_update_stable_ids_dump"
 					}
 				}
 			}
@@ -64,9 +62,7 @@ pipeline {
 		stage('Setup: Build jar file'){
 			steps{
 				script{
-					dir('update-stable-ids'){
-						sh "mvn clean compile assembly:single"
-					}
+					sh "mvn clean compile assembly:single"
 				}
 			}
 		}
@@ -75,10 +71,8 @@ pipeline {
 		stage('Main: Update Stable Identifiers'){
 			steps {
 				script{
-					dir('update-stable-ids'){
-						withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]){
-							sh "java -Xmx${env.JAVA_MEM_MAX}m -jar target/updateStableIds-${env.UPDATE_STABLE_IDS_VERSION}-jar-with-dependencies.jar $ConfigFile"
-						}
+					withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]){
+						sh "java -Xmx${env.JAVA_MEM_MAX}m -jar target/updateStableIds-${env.UPDATE_STABLE_IDS_VERSION}-jar-with-dependencies.jar $ConfigFile"
 					}
 				}
 			}
@@ -88,11 +82,9 @@ pipeline {
 		stage('Post: Create release_current from slice_current'){
 			steps{
 				script{
-					dir('update-stable-ids'){
-						withCredentials([usernamePassword(credentialsId: 'mySQLUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]) {
-							sh "mysql -u$user -p$pass -e \'drop database if exists ${env.RELEASE_CURRENT}; create database ${env.RELEASE_CURRENT}\'"
-							sh "mysqldump --opt -u$user -p$pass ${env.SLICE_CURRENT} | mysql -u$user -p$pass ${env.RELEASE_CURRENT}"
-						}
+					withCredentials([usernamePassword(credentialsId: 'mySQLUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]) {
+						sh "mysql -u$user -p$pass -e \'drop database if exists ${env.RELEASE_CURRENT}; create database ${env.RELEASE_CURRENT}\'"
+						sh "mysqldump --opt -u$user -p$pass ${env.SLICE_CURRENT} | mysql -u$user -p$pass ${env.RELEASE_CURRENT}"
 					}
 				}
 			}
@@ -101,16 +93,14 @@ pipeline {
 		stage('Post: Backup DBs'){
 			steps{
 				script{
-					dir('update-stable-ids'){
-						withCredentials([usernamePassword(credentialsId: 'mySQLUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
-							withCredentials([usernamePassword(credentialsId: 'mySQLCuratorUsernamePassword', passwordVariable: 'curPass', usernameVariable: 'curUser')]){
-								def slice_current_after_update_stable_ids_dump = "${env.SLICE_CURRENT}_${currentRelease}_after_st_id.dump"
-								def central_after_update_stable_ids_dump = "${env.GK_CENTRAL}_${currentRelease}_after_st_id.dump"
-								sh "mysqldump -u$user -p$pass ${env.SLICE_CURRENT} > $slice_current_after_update_stable_ids_dump"
-								sh "gzip -f $slice_current_after_update_stable_ids_dump"
-								sh "mysqldump -u$curUser -p$curPass -h${env.CURATOR_SERVER} ${env.GK_CENTRAL} > $central_after_update_stable_ids_dump"
-								sh "gzip -f $central_after_update_stable_ids_dump"
-							}
+					withCredentials([usernamePassword(credentialsId: 'mySQLUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
+						withCredentials([usernamePassword(credentialsId: 'mySQLCuratorUsernamePassword', passwordVariable: 'curPass', usernameVariable: 'curUser')]){
+							def slice_current_after_update_stable_ids_dump = "${env.SLICE_CURRENT}_${currentRelease}_after_st_id.dump"
+							def central_after_update_stable_ids_dump = "${env.GK_CENTRAL}_${currentRelease}_after_st_id.dump"
+							sh "mysqldump -u$user -p$pass ${env.SLICE_CURRENT} > $slice_current_after_update_stable_ids_dump"
+							sh "gzip -f $slice_current_after_update_stable_ids_dump"
+							sh "mysqldump -u$curUser -p$curPass -h${env.CURATOR_SERVER} ${env.GK_CENTRAL} > $central_after_update_stable_ids_dump"
+							sh "gzip -f $central_after_update_stable_ids_dump"
 						}
 					}
 				}
@@ -120,12 +110,10 @@ pipeline {
 		stage('Archive logs and backups'){
 			steps{
 				script{
-					dir('update-stable-ids'){
-						sh "mkdir -p archive/${currentRelease}/logs"
-						sh "mv --backup=numbered *_${currentRelease}_*.dump.gz archive/${currentRelease}/"
-						sh "gzip logs/*"
-						sh "mv logs/* archive/${currentRelease}/logs/"
-					}
+					sh "mkdir -p archive/${currentRelease}/logs"
+					sh "mv --backup=numbered *_${currentRelease}_*.dump.gz archive/${currentRelease}/"
+					sh "gzip logs/*"
+					sh "mv logs/* archive/${currentRelease}/logs/"
 				}
 			}
 		}
