@@ -32,16 +32,14 @@ pipeline {
 		stage('Setup: Rotate slice DBs'){
 			steps{
 				script{
-					dir('update-stable-ids'){
-						withCredentials([usernamePassword(credentialsId: 'mySQLUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
-							def slice_test_snapshot_dump = "${env.SLICE_TEST}_${currentRelease}_snapshot.dump"
-							sh "mysql -u$user -p$pass -e \'drop database if exists ${env.SLICE_PREVIOUS}; create database ${env.SLICE_PREVIOUS}\'"
-							sh "zcat  archive/${previousRelease}/${env.SLICE_TEST}_${previousRelease}_snapshot.dump.gz 2>&1 | mysql -u$user -p$pass ${env.SLICE_PREVIOUS}"
-							sh "mysqldump -u$user -p$pass ${env.SLICE_TEST} > $slice_test_snapshot_dump"
-							sh "gzip -f $slice_test_snapshot_dump"
-							sh "mysql -u$user -p$pass -e \'drop database if exists ${env.SLICE_CURRENT}; create database ${env.SLICE_CURRENT}\'"
-							sh "zcat  ${env.SLICE_TEST}_${currentRelease}_snapshot.dump.gz 2>&1 | mysql -u$user -p$pass ${env.SLICE_CURRENT}"
-						}
+					withCredentials([usernamePassword(credentialsId: 'mySQLUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
+						def slice_test_snapshot_dump = "${env.SLICE_TEST}_${currentRelease}_snapshot.dump"
+						sh "mysql -u$user -p$pass -e \'drop database if exists ${env.SLICE_PREVIOUS}; create database ${env.SLICE_PREVIOUS}\'"
+						sh "zcat  archive/${previousRelease}/${env.SLICE_TEST}_${previousRelease}_snapshot.dump.gz 2>&1 | mysql -u$user -p$pass ${env.SLICE_PREVIOUS}"
+						sh "mysqldump -u$user -p$pass ${env.SLICE_TEST} > $slice_test_snapshot_dump"
+						sh "gzip -f $slice_test_snapshot_dump"
+						sh "mysql -u$user -p$pass -e \'drop database if exists ${env.SLICE_CURRENT}; create database ${env.SLICE_CURRENT}\'"
+						sh "zcat  ${env.SLICE_TEST}_${currentRelease}_snapshot.dump.gz 2>&1 | mysql -u$user -p$pass ${env.SLICE_CURRENT}"
 					}
 				}
 			}
