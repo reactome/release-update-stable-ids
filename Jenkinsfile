@@ -70,7 +70,7 @@ pipeline {
 			steps {
 				script{
 					withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]){
-						sh "java -Xmx${env.JAVA_MEM_MAX}m -jar target/updateStableIds-${env.UPDATE_STABLE_IDS_VERSION}-jar-with-dependencies.jar $ConfigFile"
+						sh "java -Xmx${env.JAVA_MEM_MAX}m -jar target/updateStableIds-*-jar-with-dependencies.jar $ConfigFile"
 					}
 				}
 			}
