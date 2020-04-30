@@ -104,7 +104,7 @@ pipeline {
 					dir("ortho-stable-id-history"){
 						sh "pwd"
 						withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]) {
-							sh "pwd"
+							sh "cp $ConfigFile config.properties"
 							sh "java -jar target/OrthoStableIdHistory-*-jar-with-dependencies.jar $ConfigFile"
 						}
 					}
