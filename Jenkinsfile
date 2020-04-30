@@ -132,6 +132,8 @@ pipeline {
 					def s3Path = "${env.S3_RELEASE_DIRECTORY_URL}/${currentRelease}/update_stable_ids"
 					sh "mkdir -p databases/"
 					sh "mv --backup=numbered *_${currentRelease}_*.dump.gz databases/"
+					sh "mv data-release-pipeline/ortho-stable-id-history/logs/* logs/"
+					sh "rm -rf data-release-pipeline*"
 					sh "gzip logs/*"
 					sh "aws s3 --no-progress --recursive cp databases/ $s3Path/databases/"
 					sh "aws s3 --no-progress --recursive cp logs/ $s3Path/logs/"
