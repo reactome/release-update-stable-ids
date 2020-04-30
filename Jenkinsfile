@@ -60,10 +60,17 @@ pipeline {
 			}
 		}
 		// This stage builds the jar file using maven.
-		stage('Setup: Build jar file'){
+		stage('Setup: Build jar files'){
 			steps{
 				script{
 					sh "mvn clean compile assembly:single"
+					sh "git clone https://github.com/reactome/data-release-pipeline"
+					dir("data-release-pipeline"){
+						sh "git checkout feature/post-step-tests-stid-history"
+						dir("ortho-stable-id-history"){
+							"mvn clean compile assembly:single"
+						}
+					}
 				}
 			}
 		}
@@ -86,6 +93,17 @@ pipeline {
 					withCredentials([usernamePassword(credentialsId: 'mySQLUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]) {
 						sh "mysql -u$user -p$pass -e \'drop database if exists ${env.RELEASE_CURRENT}; create database ${env.RELEASE_CURRENT}\'"
 						sh "mysqldump --opt -u$user -p$pass ${env.SLICE_CURRENT} | mysql -u$user -p$pass ${env.RELEASE_CURRENT}"
+					}
+				}
+			}
+		}
+		stage('Post: StableIdentifier QA'){
+			steps{
+				script{
+					dir("ortho-stable-id-history"){
+						withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]) {
+							sh "java -jar target/OrthoStableIdHistory-*-jar-with-dependencies.jar $ConfigFile"
+						}
 					}
 				}
 			}
