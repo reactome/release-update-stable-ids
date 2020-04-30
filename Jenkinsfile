@@ -111,7 +111,7 @@ pipeline {
 		stage('Archive logs and backups'){
 			steps{
 				script{
-					def s3Path = "${env.S3_RELEASE_DIRECTORY_URL}/${currentRelease}/update_stable_ids/"
+					def s3Path = "${env.S3_RELEASE_DIRECTORY_URL}/${currentRelease}/update_stable_ids"
 					sh "mkdir -p databases/"
 					sh "mv --backup=numbered *_${currentRelease}_*.dump.gz databases/"
 					sh "gzip logs/*"
