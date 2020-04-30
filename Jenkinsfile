@@ -115,8 +115,8 @@ pipeline {
 					sh "mkdir -p databases/"
 					sh "mv --backup=numbered *_${currentRelease}_*.dump.gz databases/"
 					sh "gzip logs/*"
-					sh "aws s3 --no-progress --recursive cp databases/ $s3Path"
-					sh "aws s3 --no-progress --recursive cp logs/ $s3Path"
+					sh "aws s3 --no-progress --recursive cp databases/ $s3Path/databases/"
+					sh "aws s3 --no-progress --recursive cp logs/ $s3Path/logs/"
 					sh "rm -r databases"
 					sh "rm -r logs"
 				}
