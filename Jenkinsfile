@@ -101,10 +101,9 @@ pipeline {
 		stage('Post: StableIdentifier QA'){
 			steps{
 				script{
-					dir("ortho-stable-id-history"){
-						sh "pwd"
+					dir("data-release-pipeline/ortho-stable-id-history"){
 						withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]) {
-							sh "cp $ConfigFile config.properties"
+							sh "touch 123456789.txt"
 							sh "java -jar target/OrthoStableIdHistory-*-jar-with-dependencies.jar $ConfigFile"
 						}
 					}
