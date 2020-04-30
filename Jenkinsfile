@@ -8,7 +8,7 @@ pipeline {
 
 	stages {
 		// This stage checks that an upstream project, ConfirmReleaseConfig, was run successfully for its last build.
-		/*stage('Check ConfirmReleaseConfig build succeeded'){
+		stage('Check ConfirmReleaseConfig build succeeded'){
 			steps{
 				script{
 					// Get current release number from directory
@@ -97,7 +97,6 @@ pipeline {
 				}
 			}
 		}
-		*/
 		stage('Post: StableIdentifier QA'){
 			steps{
 				script{
