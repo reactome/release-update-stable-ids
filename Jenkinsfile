@@ -35,6 +35,7 @@ pipeline {
 					withCredentials([usernamePassword(credentialsId: 'mySQLUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
 						def slice_test_snapshot_dump = "${env.SLICE_TEST}_${currentRelease}_snapshot.dump"
 						def slice_previous_snapshot_dump = "${env.SLICE_TEST}_${previousRelease}_snapshot.dump.gz"
+						// Retrieve snapshot DB from S3.
 						sh "aws s3 --no-progress cp ${env.S3_RELEASE_DIRECTORY_URL}/${previousRelease}/update_stable_ids/$slice_previous_snapshot_dump ."
 						sh "mysql -u$user -p$pass -e \'drop database if exists ${env.SLICE_PREVIOUS}; create database ${env.SLICE_PREVIOUS}\'"
 						sh "zcat  $slice_previous_snapshot_dump 2>&1 | mysql -u$user -p$pass ${env.SLICE_PREVIOUS}"
@@ -65,6 +66,8 @@ pipeline {
 				script{
 					sh "mvn clean compile assembly:single"
 					sh "git clone https://github.com/reactome/data-release-pipeline"
+					// Temporary approach to setting up post-step QA artifact, which comes from a branch in data-release-pipeline. 
+					// Eventually will be moved to something like the release-common-lib repo.
 					dir("data-release-pipeline"){
 						sh "git checkout feature/post-step-tests-stid-history"
 						dir("ortho-stable-id-history"){
@@ -97,6 +100,7 @@ pipeline {
 				}
 			}
 		}
+		// QA for ensuring StableIdentifier instances are proper.
 		stage('Post: StableIdentifier QA'){
 			steps{
 				script{
@@ -125,7 +129,7 @@ pipeline {
 				}
 			}
 		}
-		// This stage archives all logs and database backups produced by UpdateStableIdentifiers
+		// This stage archives all logs and database backups produced by UpdateStableIdentifiers in the Reactome s3 bucket.
 		stage('Archive logs and backups'){
 			steps{
 				script{
