@@ -12,8 +12,8 @@ pipeline {
 			steps{
 				script{
 					// Get current release number from directory
-					currentRelease = (pwd() =~ /(\d+)\//)[0][1];
-					previousRelease = (pwd() =~ /(\d+)\//)[0][1].toInteger() - 1;
+					currentRelease = (pwd() =~ /Releases\/(\d+)\//)[0][1];
+					previousRelease = (pwd() =~ /Releases\/(\d+)\//)[0][1].toInteger() - 1;
 					// This queries the Jenkins API to confirm that the most recent build of ConfirmReleaseConfigs was successful.
 					def configStatusUrl = httpRequest authentication: 'jenkinsKey', validResponseCodes: "${env.VALID_RESPONSE_CODES}", url: "${env.JENKINS_JOB_URL}/job/${currentRelease}/job/ConfirmReleaseConfigs/lastBuild/api/json"
 					if (configStatusUrl.getStatus() == 404) {
@@ -35,7 +35,7 @@ pipeline {
 					withCredentials([usernamePassword(credentialsId: 'mySQLUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
 						def slice_test_snapshot_dump = "${env.SLICE_TEST}_${currentRelease}_snapshot.dump"
 						def slice_previous_snapshot_dump = "${env.SLICE_TEST}_${previousRelease}_snapshot.dump.gz"
-						sh "aws s3 --no-progress cp s3://reactome/private/databases/release/intermediate/${previousRelease}/update_stable_ids/$slice_previous_snapshot_dump ."
+						sh "aws s3 --no-progress cp ${env.S3_RELEASE_DIRECTORY_URL}/${currentRelease}/update_stable_ids/$slice_previous_snapshot_dump ."
 						sh "mysql -u$user -p$pass -e \'drop database if exists ${env.SLICE_PREVIOUS}; create database ${env.SLICE_PREVIOUS}\'"
 						sh "zcat  $slice_previous_snapshot_dump 2>&1 | mysql -u$user -p$pass ${env.SLICE_PREVIOUS}"
 						sh "rm $slice_previous_snapshot_dump"
