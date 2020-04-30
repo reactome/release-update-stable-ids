@@ -68,7 +68,7 @@ pipeline {
 					dir("data-release-pipeline"){
 						sh "git checkout feature/post-step-tests-stid-history"
 						dir("ortho-stable-id-history"){
-							"mvn clean compile assembly:single"
+							sh "mvn clean compile assembly:single"
 						}
 					}
 				}
