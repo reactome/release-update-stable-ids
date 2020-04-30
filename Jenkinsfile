@@ -103,7 +103,6 @@ pipeline {
 				script{
 					dir("data-release-pipeline/ortho-stable-id-history"){
 						withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]) {
-							sh "touch 123456789.txt"
 							sh "java -jar target/OrthoStableIdHistory-*-jar-with-dependencies.jar $ConfigFile"
 						}
 					}
