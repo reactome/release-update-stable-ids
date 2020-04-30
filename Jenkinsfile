@@ -34,8 +34,10 @@ pipeline {
 				script{
 					withCredentials([usernamePassword(credentialsId: 'mySQLUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
 						def slice_test_snapshot_dump = "${env.SLICE_TEST}_${currentRelease}_snapshot.dump"
+						def slice_previous_snapshot_dump "${env.SLICE_TEST}_${previousRelease}_snapshot.dump.gz"
+						sh "aws s3 cp s3://reactome/private/databases/release/intermediate/${previousRelease}/update_stable_ids/slice_previous_snapshot_dump .
 						sh "mysql -u$user -p$pass -e \'drop database if exists ${env.SLICE_PREVIOUS}; create database ${env.SLICE_PREVIOUS}\'"
-						sh "zcat  archive/${previousRelease}/${env.SLICE_TEST}_${previousRelease}_snapshot.dump.gz 2>&1 | mysql -u$user -p$pass ${env.SLICE_PREVIOUS}"
+						sh "zcat  slice_previous_snapshot_dump 2>&1 | mysql -u$user -p$pass ${env.SLICE_PREVIOUS}"
 						sh "mysqldump -u$user -p$pass ${env.SLICE_TEST} > $slice_test_snapshot_dump"
 						sh "gzip -f $slice_test_snapshot_dump"
 						sh "mysql -u$user -p$pass -e \'drop database if exists ${env.SLICE_CURRENT}; create database ${env.SLICE_CURRENT}\'"
