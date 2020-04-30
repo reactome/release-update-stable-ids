@@ -102,7 +102,9 @@ pipeline {
 			steps{
 				script{
 					dir("ortho-stable-id-history"){
+						sh "pwd"
 						withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]) {
+							sh "pwd"
 							sh "java -jar target/OrthoStableIdHistory-*-jar-with-dependencies.jar $ConfigFile"
 						}
 					}
