@@ -38,6 +38,7 @@ pipeline {
 						sh "aws s3 --no-progress cp s3://reactome/private/databases/release/intermediate/${previousRelease}/update_stable_ids/$slice_previous_snapshot_dump ."
 						sh "mysql -u$user -p$pass -e \'drop database if exists ${env.SLICE_PREVIOUS}; create database ${env.SLICE_PREVIOUS}\'"
 						sh "zcat  $slice_previous_snapshot_dump 2>&1 | mysql -u$user -p$pass ${env.SLICE_PREVIOUS}"
+						sh "rm $slice_previous_snapshot_dump"
 						sh "mysqldump -u$user -p$pass ${env.SLICE_TEST} > $slice_test_snapshot_dump"
 						sh "gzip -f $slice_test_snapshot_dump"
 						sh "mysql -u$user -p$pass -e \'drop database if exists ${env.SLICE_CURRENT}; create database ${env.SLICE_CURRENT}\'"
@@ -110,10 +111,14 @@ pipeline {
 		stage('Archive logs and backups'){
 			steps{
 				script{
-					sh "mkdir -p archive/${currentRelease}/logs"
-					sh "mv --backup=numbered *_${currentRelease}_*.dump.gz archive/${currentRelease}/"
+					def s3Path = "${env.S3_RELEASE_DIRECTORY_URL}/${currentRelease}/update_stable_ids/"
+					sh "mkdir -p databases/"
+					sh "mv --backup=numbered *_${currentRelease}_*.dump.gz databases/"
 					sh "gzip logs/*"
-					sh "mv logs/* archive/${currentRelease}/logs/"
+					sh "aws s3 --no-progress --recursive cp databases/ $s3Path"
+					sh "aws s3 --no-progress --recursive cp logs/ $s3Path"
+					sh "rm -r databases"
+					sh "rm -r logs"
 				}
 			}
 		}
