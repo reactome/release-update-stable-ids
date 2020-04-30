@@ -35,7 +35,7 @@ pipeline {
 					withCredentials([usernamePassword(credentialsId: 'mySQLUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
 						def slice_test_snapshot_dump = "${env.SLICE_TEST}_${currentRelease}_snapshot.dump"
 						def slice_previous_snapshot_dump = "${env.SLICE_TEST}_${previousRelease}_snapshot.dump.gz"
-						sh "aws s3 --no-progress cp ${env.S3_RELEASE_DIRECTORY_URL}/${currentRelease}/update_stable_ids/$slice_previous_snapshot_dump ."
+						sh "aws s3 --no-progress cp ${env.S3_RELEASE_DIRECTORY_URL}/${previousRelease}/update_stable_ids/$slice_previous_snapshot_dump ."
 						sh "mysql -u$user -p$pass -e \'drop database if exists ${env.SLICE_PREVIOUS}; create database ${env.SLICE_PREVIOUS}\'"
 						sh "zcat  $slice_previous_snapshot_dump 2>&1 | mysql -u$user -p$pass ${env.SLICE_PREVIOUS}"
 						sh "rm $slice_previous_snapshot_dump"
