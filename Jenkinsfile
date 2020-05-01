@@ -129,7 +129,7 @@ pipeline {
 				}
 			}
 		}
-		// This stage archives all logs and database backups produced by UpdateStableIdentifiers in the Reactome s3 bucket.
+		// This stage archives all logs and database backups produced by UpdateStableIdentifiers in the Reactome S3 bucket.
 		stage('Archive logs and backups'){
 			steps{
 				script{
