@@ -36,7 +36,7 @@ pipeline {
 						def slice_test_snapshot_dump = "${env.SLICE_TEST}_${currentRelease}_snapshot.dump"
 						def slice_previous_snapshot_dump = "${env.SLICE_TEST}_${previousRelease}_snapshot.dump.gz"
 						// Retrieve snapshot DB from S3.
-						sh "aws s3 --no-progress cp ${env.S3_RELEASE_DIRECTORY_URL}/${previousRelease}/update_stable_ids/$slice_previous_snapshot_dump ."
+						sh "aws s3 --no-progress cp ${env.S3_RELEASE_DIRECTORY_URL}/${previousRelease}/update_stable_ids/databases/$slice_previous_snapshot_dump ."
 						sh "mysql -u$user -p$pass -e \'drop database if exists ${env.SLICE_PREVIOUS}; create database ${env.SLICE_PREVIOUS}\'"
 						sh "zcat  $slice_previous_snapshot_dump | mysql -u$user -p$pass ${env.SLICE_PREVIOUS}"
 						sh "rm $slice_previous_snapshot_dump"
