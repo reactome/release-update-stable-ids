@@ -27,6 +27,7 @@ pipeline {
 				}
 			}
 		}
+		/*
 		// This stage moves 'slice_current' database to 'slice_previous', and then moves 'slice_test' to 'slice_current'.
 		// It also saves the slice_test dump as a snapshot, to be used in the next release.
 		stage('Setup: Rotate slice DBs'){
@@ -88,8 +89,8 @@ pipeline {
 				}
 			}
 		}
-		// This stage creates a new 'release_current' database from the freshly updated 'slice_current' database.
-		// This will be the primary database used throughout release from here.
+		*/
+		// This stage creates a new 'release_previous' database from the 'release_current' database.
 		stage('Post: Create release_previous from release_current'){
 			steps{
 				script{
