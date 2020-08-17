@@ -90,6 +90,18 @@ pipeline {
 		}
 		// This stage creates a new 'release_current' database from the freshly updated 'slice_current' database.
 		// This will be the primary database used throughout release from here.
+		stage('Post: Create release_previous from release_current'){
+			steps{
+				script{
+					withCredentials([usernamePassword(credentialsId: 'mySQLUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]) {
+						sh "mysql -u$user -p$pass -e \'drop database if exists ${env.RELEASE_PREVIOUS}; create database ${env.RELEASE_PREVIOUS}\'"
+						sh "mysqldump --opt -u$user -p$pass ${env.RELEASE_CURRENT} | mysql -u$user -p$pass ${env.RELEASE_PREVIOUS}"
+					}
+				}
+			}
+		}
+		// This stage creates a new 'release_current' database from the freshly updated 'slice_current' database.
+		// This will be the primary database used throughout release from here.
 		stage('Post: Create release_current from slice_current'){
 			steps{
 				script{
