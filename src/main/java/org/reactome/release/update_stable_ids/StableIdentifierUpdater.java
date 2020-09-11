@@ -68,7 +68,7 @@ public class StableIdentifierUpdater {
 					}
 				} else {
 					if (sliceInstanceModified.size() < prevSliceInstanceModified.size()) {
-						logger.warn(sliceInstance + " in current release has less modification instances than previous release");
+						logger.fatal(sliceInstance + " in current release has less modification instances than previous release");
 						throw new IllegalStateException("Found instance with less modification instances than in previous release -- terminating");
 					}
 					notIncrementedCount++;
