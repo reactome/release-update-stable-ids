@@ -48,7 +48,6 @@ pipeline {
 				}
 			}
 		}
-		/*
 		// This stage backs up the gk_central database before it is modified.
 		stage('Setup: Back up Curator gk_central DB'){
 			steps{
@@ -61,7 +60,6 @@ pipeline {
 				}
 			}
 		}
-		*/
 		// This stage builds the jar file using maven.
 		stage('Setup: Build jar files'){
 			steps{
@@ -90,7 +88,6 @@ pipeline {
 				}
 			}
 		}
-		/*
 		// This stage creates a new 'release_previous' database from the 'release_current' database.
 		stage('Post: Create release_previous from release_current'){
 			steps{
@@ -114,7 +111,6 @@ pipeline {
 				}
 			}
 		}
-		*/
 		// QA for ensuring StableIdentifier instances are proper.
 		stage('Post: StableIdentifier QA'){
 			steps{
@@ -127,7 +123,6 @@ pipeline {
 				}
 			}
 		}
-		/*
 		// This stage backs up the gk_central and slice_current databases after they have been modified.
 		stage('Post: Backup DBs'){
 			steps{
@@ -162,6 +157,5 @@ pipeline {
 				}
 			}
 		}
-		*/
 	}
 }
