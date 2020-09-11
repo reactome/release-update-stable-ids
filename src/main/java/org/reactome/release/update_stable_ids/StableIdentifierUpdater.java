@@ -99,11 +99,11 @@ public class StableIdentifierUpdater {
 			}
 		}
 		// TODO: Update test_slice after gkCentral has been successfully updated
-		if (dbaSlice.supportsTransactions()) {
-			dbaSlice.commit();
-		}
+//		if (dbaSlice.supportsTransactions()) {
+//			dbaSlice.commit();
+//		}
 		logger.info("Commiting all changes in " + dbaGkCentral.getDBName());
-		dbaGkCentral.commit();
+//		dbaGkCentral.commit();
 		logger.info(incrementedCount + " Stable Identifiers were updated");
 		logger.info(notIncrementedCount + " were not updated");
 		logger.info("UpdateStableIdentifiers step has finished");
