@@ -21,8 +21,8 @@ public class StableIdentifierUpdater {
 		logger.info("Generating InstanceEdits for " + dbaSlice.getDBName() + " and " + dbaGkCentral.getDBName());
 		// Instance Edits for test_slice and gk_central
 		String creatorName = "org.reactome.release.updateStableIds";
-//		GKInstance sliceIE = InstanceEditUtils.createInstanceEdit(dbaSlice, personId, creatorName);
-//		GKInstance gkCentralIE = InstanceEditUtils.createInstanceEdit(dbaGkCentral, personId, creatorName);
+		GKInstance sliceIE = InstanceEditUtils.createInstanceEdit(dbaSlice, personId, creatorName);
+		GKInstance gkCentralIE = InstanceEditUtils.createInstanceEdit(dbaGkCentral, personId, creatorName);
 
 		// At time of writing (December 2018), test_slice is a non-transactional database. This check has been put in place as a safety net in case that changes.
 		if (dbaSlice.supportsTransactions()) {
@@ -58,8 +58,8 @@ public class StableIdentifierUpdater {
 					// Make sure StableIdentifier instance exists
 					if (sliceInstance.getAttributeValue(stableIdentifier) != null && gkCentralInstance.getAttributeValue(stableIdentifier) != null) {
 						logger.info("\tIncrementing " + sliceInstance.getAttributeValue(stableIdentifier));
-//						incrementStableIdentifier(sliceInstance, dbaSlice, sliceIE);
-//						incrementStableIdentifier(gkCentralInstance, dbaGkCentral, gkCentralIE);
+						incrementStableIdentifier(sliceInstance, dbaSlice, sliceIE);
+						incrementStableIdentifier(gkCentralInstance, dbaGkCentral, gkCentralIE);
 						incrementedCount++;
 					} else if (sliceInstance.getAttributeValue(stableIdentifier) == null){
 						logger.warn(sliceInstance + ": could not locate StableIdentifier instance");
@@ -68,8 +68,8 @@ public class StableIdentifierUpdater {
 					}
 				} else {
 					if (sliceInstanceModified.size() < prevSliceInstanceModified.size()) {
-						logger.warn("FATAL: " + sliceInstance + " in current release has less modification instances than previous release");
-//						throw new IllegalStateException("Found instance with less modification instances than in previous release -- terminating");
+						logger.warn(sliceInstance + " in current release has less modification instances than previous release");
+						throw new IllegalStateException("Found instance with less modification instances than in previous release -- terminating");
 					}
 					notIncrementedCount++;
 				}
@@ -83,10 +83,10 @@ public class StableIdentifierUpdater {
 
 						if (releaseStatusString == null || !releaseStatusString.equals(updated)) {
 							logger.info("Updating release status for " + sliceInstance);
-//							sliceInstance.addAttributeValue(releaseStatus, updated);
-//							sliceInstance.addAttributeValue(modified, sliceIE);
-//							dbaSlice.updateInstanceAttribute(sliceInstance, releaseStatus);
-//							dbaSlice.updateInstanceAttribute(sliceInstance, modified);
+							sliceInstance.addAttributeValue(releaseStatus, updated);
+							sliceInstance.addAttributeValue(modified, sliceIE);
+							dbaSlice.updateInstanceAttribute(sliceInstance, releaseStatus);
+							dbaSlice.updateInstanceAttribute(sliceInstance, modified);
 						} else {
 							logger.info("StableIdentifer has already been updated during this release");
 						}
@@ -99,11 +99,11 @@ public class StableIdentifierUpdater {
 			}
 		}
 		// TODO: Update test_slice after gkCentral has been successfully updated
-//		if (dbaSlice.supportsTransactions()) {
-//			dbaSlice.commit();
-//		}
+		if (dbaSlice.supportsTransactions()) {
+			dbaSlice.commit();
+		}
 		logger.info("Commiting all changes in " + dbaGkCentral.getDBName());
-//		dbaGkCentral.commit();
+		dbaGkCentral.commit();
 		logger.info(incrementedCount + " Stable Identifiers were updated");
 		logger.info(notIncrementedCount + " were not updated");
 		logger.info("UpdateStableIdentifiers step has finished");
@@ -121,9 +121,9 @@ public class StableIdentifierUpdater {
 		stableIdentifierInst.setDisplayName(id + "." + newIdentifierVersion);
 		Collection<GKInstance> modifiedInstances = (Collection<GKInstance>) stableIdentifierInst.getAttributeValuesList(modified);
 		stableIdentifierInst.addAttributeValue(modified, instanceEdit);
-//		dba.updateInstanceAttribute(stableIdentifierInst, identifierVersion);
-//		dba.updateInstanceAttribute(stableIdentifierInst, _displayName);
-//		dba.updateInstanceAttribute(stableIdentifierInst, modified);
+		dba.updateInstanceAttribute(stableIdentifierInst, identifierVersion);
+		dba.updateInstanceAttribute(stableIdentifierInst, _displayName);
+		dba.updateInstanceAttribute(stableIdentifierInst, modified);
 	}
 
 	// Checks via the 'releaseStatus', 'revised', and 'reviewed' attributes if this instance has been updated since last release.
