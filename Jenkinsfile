@@ -104,18 +104,16 @@ pipeline {
 						// Take existing 'release_current' DB and replace 'release_previous' with it.
 						// TODO this should come from S3 final DB resting place.
 						def previousReleaseVersion = utils.getPreviousReleaseVersion()
-						def previousReleaseCurrentFinalFilename = "${env.RELEASE_CURRENT_DB}_${previousReleaseVersion}_final.dump"
-						utils.takeDatabaseDump("${env.RELEASE_CURRENT_DB}", "${previousReleaseCurrentFinalFilename}", "${env.RELEASE_SERVER}")
-				      		sh "gzip ${previousReleaseCurrentFinalFilename}"
-						utils.replaceDatabase("${env.RELEASE_PREVIOUS_DB}", "${previousReleaseCurrentFinalFilename}.gz")
-						sh "rm ${previousReleaseCurrentFinalFilename}.gz"
+						def releaseCurrentDBToBeReplacedDumpName = "${env.RELEASE_CURRENT_DB}_${previousReleaseVersion}_final.dump"
+						utils.takeDatabaseDump("${env.RELEASE_CURRENT_DB}", "${releaseCurrentDBToBeReplacedDumpName}", "${env.RELEASE_SERVER}")
+				      		sh "gzip ${releaseCurrentDBToBeReplacedDumpName}"
+						utils.replaceDatabase("${env.RELEASE_PREVIOUS_DB}", "${releaseCurrentDBToBeReplacedDumpName}.gz")
+						sh "rm ${releaseCurrentDBToBeReplacedDumpName}.gz"
 						
 						// Replace 'release_current' DB with updated 'slice_current' DB.
 				    		def releaseVersion = utils.getReleaseVersion()
-						def sliceCurrentDump = "${env.SLICE_CURRENT_DB}_${releaseVersion}.dump"
-						def databaseDumpFilename = utils.takeDatabaseDumpAndGzip("${env.SLICE_CURRENT_DB}", "update_stable_ids", "after", "${env.RELEASE_SERVER}")
-			            		sh "echo ${databaseDumpFilename}"
-				 		utils.replaceDatabase("${env.RELEASE_CURRENT_DB}", "${databaseDumpFilename}")
+						def sliceCurrentAfterStableIdUpdateDump = utils.takeDatabaseDumpAndGzip("${env.SLICE_CURRENT_DB}", "update_stable_ids", "after", "${env.RELEASE_SERVER}")
+				 		utils.replaceDatabase("${env.RELEASE_CURRENT_DB}", "${sliceCurrentAfterStableIdUpdateDump}")
 					}
 				}
 			}
