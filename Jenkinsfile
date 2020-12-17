@@ -1,7 +1,6 @@
 // This Jenkinsfile is used by Jenkins to run the UpdateStableIdentifiers step of Reactome's release.
 // It requires that the ConfirmReleaseConfigs step has been run successfully before it can be run.
 
-import groovy.json.JsonSlurper
 import org.reactome.release.jenkins.utilities.Utilities
 
 // Shared library maintained at 'release-jenkins-utils' repository.
@@ -26,7 +25,7 @@ pipeline {
 				script{
 					withCredentials([usernamePassword(credentialsId: 'mySQLUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
 						
-						// Replace 'slice_previous' db with snapshot slice DB from S3.
+						// Replace 'slice_previous' db with 'snapshot' slice DB from S3.
 						def previousReleaseVersion = utils.getPreviousReleaseVersion()
 						def slicePreviousSnapshotDump = "${env.SLICE_TEST_DB}_${previousReleaseVersion}_snapshot.dump.gz"
 						// Retrieve previous releases' snapshot slice DB from S3.
