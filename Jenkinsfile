@@ -78,6 +78,19 @@ pipeline {
 		stage('Post: Build and run StableIdentifier QA') {
 			steps{
 				script{
+				    	utils.cloneOrUpdateLocalRepo("release-qa")
+					dir("release-qa") {
+						utils.buildJarFile()
+
+						sh "ln -sf src/main/resources/ resources"
+
+						withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]){
+						    sh "cp $ConfigFile resources/auth.properties"
+						    sh "java -Xmx${env.JAVA_MEM_MAX}m -jar target/release-qa-*-jar-with-dependencies.jar StableIdentifierVersionMismatchCheck"
+						    sh "rm resources/auth.properties"
+						}
+				    
+				    	}
 					// Clone data-release-pipeline and checkout specific branch
 					utils.cloneOrUpdateLocalRepo("data-release-pipeline")
 					dir("data-release-pipeline") {
@@ -132,12 +145,20 @@ pipeline {
 		stage('Post: Archive Outputs'){
 			steps{
 				script{
-					def dataFiles = []
+				    def releaseVersion = utils.getReleaseVersion()
+					sh "cp ${SLICE_CURRENT_DB}_${releaseVersion}_after_update_stable_ids*dump.gz test_slice_${releaseVersion}.dump.gz"
+					sh "cp ${SLICE_TEST_DB}_${releaseVersion}_snapshot.dump.gz test_slice_${releaseVersion}_snapshot.dump.gz"
+					def slice_final = "slice_final/"
+					sh "mkdir -p ${slice_final}"
+					sh "mv -f test_slice_${releaseVersion}*dump.gz ${slice_final}"
+					sh "aws s3 --no-progress cp --recursive ${slice_final} s3://reactome/private/databases/slice_final/"
+					
+					def dataFiles = ["release-qa/output/*"]
 					// Additional log files from post-step QA need to be pulled in
 					def logFiles = ["data-release-pipeline/ortho-stable-id-history/logs/*"]
 					// This folder is utilized for post-step QA. Jenkins creates multiple temporary directories
 					// cloning and checking out repositories, which is why the wildcard is added.
-					def foldersToDelete = ["data-release-pipeline*"]
+					def foldersToDelete = ["data-release-pipeline*", "release-qa*", "${slice_final}"]
 					utils.cleanUpAndArchiveBuildFiles("update_stable_ids", dataFiles, logFiles, foldersToDelete)
 				}
 			}
