@@ -1,8 +1,11 @@
-import groovy.json.JsonSlurper
 // This Jenkinsfile is used by Jenkins to run the UpdateStableIdentifiers step of Reactome's release.
 // It requires that the ConfirmReleaseConfigs step has been run successfully before it can be run.
-def currentRelease
-def previousRelease
+
+import org.reactome.release.jenkins.utilities.Utilities
+
+// Shared library maintained at 'release-jenkins-utils' repository.
+def utils = new Utilities()
+
 pipeline {
 	agent any
 
@@ -11,19 +14,7 @@ pipeline {
 		stage('Check ConfirmReleaseConfig build succeeded'){
 			steps{
 				script{
-					// Get current release number from directory
-					currentRelease = (pwd() =~ /Releases\/(\d+)\//)[0][1];
-					previousRelease = (pwd() =~ /Releases\/(\d+)\//)[0][1].toInteger() - 1;
-					// This queries the Jenkins API to confirm that the most recent build of ConfirmReleaseConfigs was successful.
-					def configStatusUrl = httpRequest authentication: 'jenkinsKey', validResponseCodes: "${env.VALID_RESPONSE_CODES}", url: "${env.JENKINS_JOB_URL}/job/${currentRelease}/job/ConfirmReleaseConfigs/lastBuild/api/json"
-					if (configStatusUrl.getStatus() == 404) {
-						error("ConfirmReleaseConfigs has not yet been run. Please complete a successful build.")
-					} else {
-						def configStatusJson = new JsonSlurper().parseText(configStatusUrl.getContent())
-						if (configStatusJson['result'] != "SUCCESS"){
-							error("Most recent ConfirmReleaseConfigs build status: " + configStatusJson['result'] + ". Please complete a successful build.")
-						}
-					}
+					utils.checkUpstreamBuildsSucceeded("ConfirmReleaseConfigs")
 				}
 			}
 		}
@@ -32,16 +23,22 @@ pipeline {
 		stage('Setup: Rotate slice DBs'){
 			steps{
 				script{
-					dir('update-stable-ids'){
-						withCredentials([usernamePassword(credentialsId: 'mySQLUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
-							def slice_test_snapshot_dump = "${env.SLICE_TEST}_${currentRelease}_snapshot.dump"
-							sh "mysql -u$user -p$pass -e \'drop database if exists ${env.SLICE_PREVIOUS}; create database ${env.SLICE_PREVIOUS}\'"
-							sh "zcat  archive/${previousRelease}/${env.SLICE_TEST}_${previousRelease}_snapshot.dump.gz 2>&1 | mysql -u$user -p$pass ${env.SLICE_PREVIOUS}"
-							sh "mysqldump -u$user -p$pass ${env.SLICE_TEST} > $slice_test_snapshot_dump"
-							sh "gzip -f $slice_test_snapshot_dump"
-							sh "mysql -u$user -p$pass -e \'drop database if exists ${env.SLICE_CURRENT}; create database ${env.SLICE_CURRENT}\'"
-							sh "zcat  ${env.SLICE_TEST}_${currentRelease}_snapshot.dump.gz 2>&1 | mysql -u$user -p$pass ${env.SLICE_CURRENT}"
-						}
+					withCredentials([usernamePassword(credentialsId: 'mySQLUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
+						
+						// Replace 'slice_previous' db with 'snapshot' slice DB from S3.
+						def previousReleaseVersion = utils.getPreviousReleaseVersion()
+						def slicePreviousSnapshotDump = "${env.SLICE_TEST_DB}_${previousReleaseVersion}_snapshot.dump.gz"
+						// Retrieve previous releases' snapshot slice DB from S3.
+						sh "aws s3 --no-progress cp ${env.S3_RELEASE_DIRECTORY_URL}/${previousReleaseVersion}/update_stable_ids/databases/${slicePreviousSnapshotDump} ."
+						utils.replaceDatabase("${env.SLICE_PREVIOUS_DB}", "${slicePreviousSnapshotDump}")
+						sh "rm ${slicePreviousSnapshotDump}"
+						
+						// Replace 'slice_current' DB with 'slice_test' DB from dump.
+						def releaseVersion = utils.getReleaseVersion()
+						def sliceTestSnapshotDump = "${SLICE_TEST_DB}_${releaseVersion}_snapshot.dump"
+						utils.takeDatabaseDump("${env.SLICE_TEST_DB}", "${sliceTestSnapshotDump}", "${env.RELEASE_SERVER}")
+						sh "gzip -f ${sliceTestSnapshotDump}"
+						utils.replaceDatabase("${env.SLICE_CURRENT_DB}", "${sliceTestSnapshotDump}.gz")
 					}
 				}
 			}
@@ -50,23 +47,17 @@ pipeline {
 		stage('Setup: Back up Curator gk_central DB'){
 			steps{
 				script{
-					dir('update-stable-ids'){
-						withCredentials([usernamePassword(credentialsId: 'mySQLCuratorUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
-							def central_before_update_stable_ids_dump = "${env.GK_CENTRAL}_${currentRelease}_before_st_id.dump"
-							sh "mysqldump -u$user -p$pass -h${env.CURATOR_SERVER} ${env.GK_CENTRAL} > $central_before_update_stable_ids_dump"
-							sh "gzip -f $central_before_update_stable_ids_dump"
-						}
+					withCredentials([usernamePassword(credentialsId: 'mySQLCuratorUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
+						utils.takeDatabaseDumpAndGzip("${env.GK_CENTRAL_DB}", "update_stable_ids", "before", "${env.CURATOR_SERVER}")
 					}
 				}
 			}
 		}
 		// This stage builds the jar file using maven.
-		stage('Setup: Build jar file'){
+		stage('Setup: Build jar files'){
 			steps{
 				script{
-					dir('update-stable-ids'){
-						sh "mvn clean compile assembly:single"
-					}
+					utils.buildJarFile()
 				}
 			}
 		}
@@ -75,57 +66,103 @@ pipeline {
 		stage('Main: Update Stable Identifiers'){
 			steps {
 				script{
-					dir('update-stable-ids'){
+					withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]){
+						sh "java -Xmx${env.JAVA_MEM_MAX}m -jar target/update-stable-ids-*-jar-with-dependencies.jar $ConfigFile"
+					}
+				}
+			}
+		}
+		// This stage runs StableIdentifier QA, which checks all stable ids in the database for valid formats.
+		// Currently this module comes from data-release-pipeline@feature/post-step-stid-history, but in
+		// the future will be moved to a QA repository, specific to release.
+		stage('Post: Build and run StableIdentifier QA') {
+			steps{
+				script{
+					// Clone release-qa and run the StableIdentifierVersionMistmatch QA check
+				    	utils.cloneOrUpdateLocalRepo("release-qa")
+					dir("release-qa") {
+						utils.buildJarFile()
+						sh "ln -sf src/main/resources/ resources"
+
 						withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]){
-							sh "java -Xmx${env.JAVA_MEM_MAX}m -jar target/updateStableIds-${env.UPDATE_STABLE_IDS_VERSION}-jar-with-dependencies.jar $ConfigFile"
+						    sh "cp $ConfigFile resources/auth.properties"
+						    sh "java -Xmx${env.JAVA_MEM_MAX}m -jar target/release-qa-*-jar-with-dependencies.jar StableIdentifierVersionMismatchCheck"
+						    sh "rm resources/auth.properties"
 						}
-					}
-				}
-			}
-		}
-		// This stage creates a new 'release_current' database from the freshly updated 'slice_current' database.
-		// This will be the primary database used throughout release from here.
-		stage('Post: Create release_current from slice_current'){
-			steps{
-				script{
-					dir('update-stable-ids'){
-						withCredentials([usernamePassword(credentialsId: 'mySQLUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]) {
-							sh "mysql -u$user -p$pass -e \'drop database if exists ${env.RELEASE_CURRENT}; create database ${env.RELEASE_CURRENT}\'"
-							sh "mysqldump --opt -u$user -p$pass ${env.SLICE_CURRENT} | mysql -u$user -p$pass ${env.RELEASE_CURRENT}"
-						}
-					}
-				}
-			}
-		}
-		// This stage backs up the gk_central and slice_current databases after they have been modified.
-		stage('Post: Backup DBs'){
-			steps{
-				script{
-					dir('update-stable-ids'){
-						withCredentials([usernamePassword(credentialsId: 'mySQLUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
-							withCredentials([usernamePassword(credentialsId: 'mySQLCuratorUsernamePassword', passwordVariable: 'curPass', usernameVariable: 'curUser')]){
-								def slice_current_after_update_stable_ids_dump = "${env.SLICE_CURRENT}_${currentRelease}_after_st_id.dump"
-								def central_after_update_stable_ids_dump = "${env.GK_CENTRAL}_${currentRelease}_after_st_id.dump"
-								sh "mysqldump -u$user -p$pass ${env.SLICE_CURRENT} > $slice_current_after_update_stable_ids_dump"
-								sh "gzip -f $slice_current_after_update_stable_ids_dump"
-								sh "mysqldump -u$curUser -p$curPass -h${env.CURATOR_SERVER} ${env.GK_CENTRAL} > $central_after_update_stable_ids_dump"
-								sh "gzip -f $central_after_update_stable_ids_dump"
+				    
+				    	}
+					// Clone data-release-pipeline and checkout specific branch
+					utils.cloneOrUpdateLocalRepo("data-release-pipeline")
+					dir("data-release-pipeline") {
+				        	sh "git checkout develop"
+				        
+						// Build and run QA jar file
+						dir("ortho-stable-id-history") {
+							utils.buildJarFile()
+							withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]) {
+								sh "java -jar target/OrthoStableIdHistory-*-jar-with-dependencies.jar $ConfigFile"
 							}
 						}
 					}
 				}
 			}
 		}
-		// This stage archives all logs and database backups produced by UpdateStableIdentifiers
-		stage('Archive logs and backups'){
+		// This stage creates a new 'release_previous' database from the 'release_current' database,
+		// and takes the recently updated 'slice_current' database and creates a new 'release_current' one.
+		stage('Post: Rotate release DBs'){
 			steps{
 				script{
-					dir('update-stable-ids'){
-						sh "mkdir -p archive/${currentRelease}/logs"
-						sh "mv --backup=numbered *_${currentRelease}_*.dump.gz archive/${currentRelease}/"
-						sh "gzip logs/*"
-						sh "mv logs/* archive/${currentRelease}/logs/"
+					withCredentials([usernamePassword(credentialsId: 'mySQLUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]) {
+						
+						// Take existing 'release_current' DB and replace 'release_previous' with it.
+						// TODO this should come from S3 final DB resting place.
+						def previousReleaseVersion = utils.getPreviousReleaseVersion()
+						def releaseCurrentDBToBeReplacedDumpName = "${env.RELEASE_CURRENT_DB}_${previousReleaseVersion}_final.dump"
+						utils.takeDatabaseDump("${env.RELEASE_CURRENT_DB}", "${releaseCurrentDBToBeReplacedDumpName}", "${env.RELEASE_SERVER}")
+				      		sh "gzip ${releaseCurrentDBToBeReplacedDumpName}"
+						utils.replaceDatabase("${env.RELEASE_PREVIOUS_DB}", "${releaseCurrentDBToBeReplacedDumpName}.gz")
+						sh "rm ${releaseCurrentDBToBeReplacedDumpName}.gz"
+						
+						// Replace 'release_current' DB with updated 'slice_current' DB.
+				    		def releaseVersion = utils.getReleaseVersion()
+						def sliceCurrentAfterStableIdUpdateDump = utils.takeDatabaseDumpAndGzip("${env.SLICE_CURRENT_DB}", "update_stable_ids", "after", "${env.RELEASE_SERVER}")
+				 		utils.replaceDatabase("${env.RELEASE_CURRENT_DB}", "${sliceCurrentAfterStableIdUpdateDump}")
 					}
+				}
+			}
+		}
+		// This stage backs up the gk_central and slice_current databases after they have been modified.
+		stage('Post: Back up Curator gk_central DB'){
+			steps{
+				script{
+					withCredentials([usernamePassword(credentialsId: 'mySQLCuratorUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
+                        			utils.takeDatabaseDumpAndGzip("${env.GK_CENTRAL_DB}", "update_stable_ids", "after", "${env.CURATOR_SERVER}")
+					}
+				}
+			}
+		}
+		// Archives logs and databases on S3, and then everything on the server.
+		stage('Post: Archive Outputs'){
+			steps{
+				script{
+					def releaseVersion = utils.getReleaseVersion()
+					def slice_final_folder = "slice_final/"
+					// Create copies of the 'slice_test' and 'slice_current_after_stable_ids' databases, storing them in the
+					// slice_final directory on S3 as 'test_slice_XX_snapshot.dump.gz' and 'test_slice_XX.dump.gz', respectively.
+					sh "cp ${SLICE_CURRENT_DB}_${releaseVersion}_after_update_stable_ids*dump.gz test_slice_${releaseVersion}.dump.gz"
+					sh "cp ${SLICE_TEST_DB}_${releaseVersion}_snapshot.dump.gz test_slice_${releaseVersion}_snapshot.dump.gz"
+					
+					sh "mkdir -p ${slice_final_folder}"
+					sh "mv -f test_slice_${releaseVersion}*dump.gz ${slice_final_folder}"
+					sh "aws s3 --no-progress cp --recursive ${slice_final_folder} s3://reactome/private/databases/${slice_final_folder}"
+					
+					def dataFiles = ["release-qa/output/*"]
+					// Additional log files from post-step QA need to be pulled in
+					def logFiles = ["data-release-pipeline/ortho-stable-id-history/logs/*"]
+					// This folder is utilized for post-step QA. Jenkins creates multiple temporary directories
+					// cloning and checking out repositories, which is why the wildcard is added.
+					def foldersToDelete = ["data-release-pipeline*", "release-qa*", "${slice_final_folder}"]
+					utils.cleanUpAndArchiveBuildFiles("update_stable_ids", dataFiles, logFiles, foldersToDelete)
 				}
 			}
 		}
