@@ -81,6 +81,7 @@ pipeline {
 					// Clone release-qa and run the StableIdentifierVersionMistmatch QA check
 				    	utils.cloneOrUpdateLocalRepo("release-qa")
 					dir("release-qa") {
+						sh "git checkout main-release"
 						utils.buildJarFile()
 						sh "ln -sf src/main/resources/ resources"
 
