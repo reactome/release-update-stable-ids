@@ -82,7 +82,7 @@ pipeline {
 				    	utils.cloneOrUpdateLocalRepo("release-qa")
 					dir("release-qa") {
 						sh "git checkout main-release"
-						utils.buildJarFile()
+						utils.buildJarFileWithPackage()
 						sh "ln -sf src/main/resources/ resources"
 
 						withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]){
