@@ -87,7 +87,7 @@ pipeline {
 
 						withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]){
 						    sh "cp $ConfigFile resources/auth.properties"
-						    sh "java -Xmx${env.JAVA_MEM_MAX}m -jar target/release-qa-*-jar-with-dependencies.jar StableIdentifierVersionMismatchCheck"
+						    sh "java -Xmx${env.JAVA_MEM_MAX}m -jar target/release-qa-*-exec.jar StableIdentifierVersionMismatchCheck"
 						    sh "rm resources/auth.properties"
 						}
 				    
