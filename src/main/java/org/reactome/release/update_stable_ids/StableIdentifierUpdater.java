@@ -18,17 +18,17 @@ public class StableIdentifierUpdater {
 	@SuppressWarnings("unchecked")
 	public static void updateStableIdentifiers(MySQLAdaptor dbaSlice, MySQLAdaptor dbaPrevSlice, MySQLAdaptor dbaGkCentral, Long personId) throws Exception {
 
-		logger.info("Generating InstanceEdits for " + dbaSlice.getDBName() + " and " + dbaGkCentral.getDBName());
+		logger.info("Generating InstanceEdits for " + dbaSlice.getDBName());// + " and " + dbaGkCentral.getDBName());
 		// Instance Edits for test_slice and gk_central
 		String creatorName = "org.reactome.release.updateStableIds";
 		GKInstance sliceIE = InstanceEditUtils.createInstanceEdit(dbaSlice, personId, creatorName);
-		GKInstance gkCentralIE = InstanceEditUtils.createInstanceEdit(dbaGkCentral, personId, creatorName);
+		//GKInstance gkCentralIE = InstanceEditUtils.createInstanceEdit(dbaGkCentral, personId, creatorName);
 
 		// At time of writing (December 2018), test_slice is a non-transactional database. This check has been put in place as a safety net in case that changes.
 		if (dbaSlice.supportsTransactions()) {
 			dbaSlice.startTransaction();
 		}
-		dbaGkCentral.startTransaction();
+		//dbaGkCentral.startTransaction();
 
 		//TODO: Perl wrapper will create a 'snapshot' of the previous slice -- once the wrapper is retired this needs to be done
 
@@ -59,9 +59,9 @@ public class StableIdentifierUpdater {
 					if (sliceInstance.getAttributeValue(stableIdentifier) != null && gkCentralInstance.getAttributeValue(stableIdentifier) != null) {
 						logger.info("\tIncrementing " + sliceInstance.getAttributeValue(stableIdentifier));
 						incrementStableIdentifier(sliceInstance, dbaSlice, sliceIE);
-						incrementStableIdentifier(gkCentralInstance, dbaGkCentral, gkCentralIE);
+						//incrementStableIdentifier(gkCentralInstance, dbaGkCentral, gkCentralIE);
 						incrementedCount++;
-					} else if (sliceInstance.getAttributeValue(stableIdentifier) == null){
+					} else if (sliceInstance.getAttributeValue(stableIdentifier) == null) {
 						logger.warn(sliceInstance + ": could not locate StableIdentifier instance");
 					} else {
 						logger.warn(prevSliceInstance + ": Instance from previous slice did not have StableIdentifier instance");
@@ -88,7 +88,7 @@ public class StableIdentifierUpdater {
 							dbaSlice.updateInstanceAttribute(sliceInstance, releaseStatus);
 							dbaSlice.updateInstanceAttribute(sliceInstance, modified);
 						} else {
-							logger.info("StableIdentifer has already been updated during this release");
+							logger.info("StableIdentifier has already been updated during this release");
 						}
 					}
 				} catch (Exception e) {
@@ -102,8 +102,8 @@ public class StableIdentifierUpdater {
 		if (dbaSlice.supportsTransactions()) {
 			dbaSlice.commit();
 		}
-		logger.info("Commiting all changes in " + dbaGkCentral.getDBName());
-		dbaGkCentral.commit();
+		//logger.info("Commiting all changes in " + dbaGkCentral.getDBName());
+		//dbaGkCentral.commit();
 		logger.info(incrementedCount + " Stable Identifiers were updated");
 		logger.info(notIncrementedCount + " were not updated");
 		logger.info("UpdateStableIdentifiers step has finished");
