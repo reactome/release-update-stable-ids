@@ -95,7 +95,6 @@ pipeline {
 					// Clone data-release-pipeline and checkout specific branch
 					utils.cloneOrUpdateLocalRepo("data-release-pipeline")
 					dir("data-release-pipeline") {
-				        	sh "git checkout develop"
 				        
 						// Build and run QA jar file
 						dir("ortho-stable-id-history") {
