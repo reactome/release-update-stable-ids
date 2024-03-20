@@ -70,7 +70,7 @@ jobs:
                 echo "SHORT_SHA=${FULL_SHA:0:7}" >> $GITHUB_OUTPUT
             
             - env:
-                AWS_REGION : us-east-1
+                AWS_REGION: us-east-1
               uses: aws-actions/configure-aws-credentials@v4
               with:
                 role-to-assume: ${{ vars.AWS_ROLE }}
