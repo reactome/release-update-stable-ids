@@ -1,6 +1,9 @@
 package org.reactome.release.update_stable_ids;
 
-import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.SQLException;
 import java.util.Properties;
 
@@ -13,47 +16,74 @@ import org.gk.persistence.MySQLAdaptor;
  * Instances that have been changed have their 'identifierVersion' attribute incremented by 1 to reflect a change.
  *
  */
-public class Main
-{
+public class Main {
 	private static final Logger logger = LogManager.getLogger();
 
-	public static void main( String[] args ) throws Exception
-	{
+	public static void main(String[] args) throws Exception {
 		logger.info("Beginning UpdateStableIds step...");
 
-		String pathToConfig = "";
-		if (args.length > 0) {
-			pathToConfig = args[0];
-		} else {
-			pathToConfig = "src/main/resources/config.properties";
-		}
+		Properties props = getProperties(getPathToConfigFile(args));
 
-		//Sets up the various DB Adaptors needed. This includes the current and previous test_slice versions on the release server,
-		//as well as gk_central on the curation server.
-		Properties props = new Properties();
-		props.load(new FileInputStream(pathToConfig));
-		int port = Integer.valueOf(props.getProperty("release.database.port"));
-		int releaseNumber = Integer.valueOf(props.getProperty("releaseNumber"));
-		int prevReleaseNumber = releaseNumber - 1;
-
-		MySQLAdaptor dbaSlice = createDatabaseAdaptor(props, "release.database.user", "release.database.password", "release.database.host","slice_current.name", "release.database.port");
-		MySQLAdaptor dbaPrevSlice = createDatabaseAdaptor(props, "release.database.user", "release.database.password", "release.database.host","slice_previous.name", "release.database.port");
-		MySQLAdaptor dbaGkCentral = createDatabaseAdaptor(props, "curator.database.user", "curator.database.password", "curator.database.host", "curator.database.name", "curator.database.port");
-
+		MySQLAdaptor dbaSlice = getCurrentSliceDBA(props);
+		MySQLAdaptor dbaPrevSlice = getPreviousSliceDBA(props);
+		MySQLAdaptor dbaGkCentral = getCuratorDBA(props);
 		long personId = Long.parseLong(props.getProperty("personId"));
+
 		StableIdentifierUpdater.updateStableIdentifiers(dbaSlice, dbaPrevSlice, dbaGkCentral, personId);
 
 		logger.info("Finished UpdateStableIds step");
 	}
 
-	private static MySQLAdaptor createDatabaseAdaptor(Properties props, String userProperty, String passwordProperty, String hostProperty, String databaseNameProperty, String portProperty) throws SQLException {
-		String userName = props.getProperty(userProperty);
-		String password = props.getProperty(passwordProperty);
-		String host = props.getProperty(hostProperty);
-		String databaseName = props.getProperty(databaseNameProperty);
-		int port = Integer.parseInt(props.getProperty(portProperty));
+	private static Properties getProperties(Path pathToConfigFile) throws IOException {
+		Properties props = new Properties();
+		props.load(Files.newInputStream(pathToConfigFile));
+		return props;
+	}
 
-		logger.info("Creating DB adaptor for " + databaseName + " at " + host + " on port " + port + " for user " + userName);
+	private static Path getPathToConfigFile(String[] args) {
+		String pathToConfigFile;
+		if (args.length > 0) {
+			pathToConfigFile = args[0];
+		} else {
+			pathToConfigFile = "src/main/resources/config.properties";
+		}
+
+		return Paths.get(pathToConfigFile);
+	}
+
+	private static MySQLAdaptor getCurrentSliceDBA(Properties props) throws SQLException {
+		String databaseNameProperty = "slice_current.name";
+
+		return getReleaseDBA(props, databaseNameProperty);
+	}
+
+	private static MySQLAdaptor getPreviousSliceDBA(Properties props) throws SQLException {
+		String databaseNameProperty = "slice_previous.name";
+
+		return getReleaseDBA(props, databaseNameProperty);
+	}
+
+	private static MySQLAdaptor getReleaseDBA(Properties props, String databaseNameProperty) throws SQLException {
+		final String propertyPrefix = "release.database";
+
+		return getDBA(props, propertyPrefix, databaseNameProperty);
+	}
+
+	private static MySQLAdaptor getCuratorDBA(Properties props) throws SQLException {
+		final String propertyPrefix = "curator.database";
+		final String databaseNameProperty = propertyPrefix + ".name";
+
+		return getDBA(props, propertyPrefix, databaseNameProperty);
+	}
+
+	private static MySQLAdaptor getDBA(Properties props, String propertyPrefix, String databaseNameProperty)
+		throws SQLException {
+
+		String userName = props.getProperty(propertyPrefix + ".user");
+		String password = props.getProperty(propertyPrefix + ".password");
+		String host = props.getProperty(propertyPrefix + ".host");
+		String databaseName = props.getProperty(databaseNameProperty);
+		int port = Integer.parseInt(props.getProperty(propertyPrefix + ".port"));
 
 		return new MySQLAdaptor(host, databaseName, userName, password, port);
 	}
