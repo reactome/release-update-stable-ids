@@ -29,7 +29,8 @@ public class Main {
 		MySQLAdaptor dbaGkCentral = getCuratorDBA(props);
 		long personId = Long.parseLong(props.getProperty("personId"));
 
-		StableIdentifierUpdater.updateStableIdentifiers(dbaSlice, dbaPrevSlice, dbaGkCentral, personId);
+		StableIdentifierUpdater stableIdentifierUpdater = new StableIdentifierUpdater();
+		stableIdentifierUpdater.update(dbaSlice, dbaPrevSlice, dbaGkCentral, personId);
 
 		logger.info("Finished UpdateStableIds step");
 	}
