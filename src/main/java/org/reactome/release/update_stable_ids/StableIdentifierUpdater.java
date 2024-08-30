@@ -54,18 +54,18 @@ public class StableIdentifierUpdater {
 				continue;
 			}
 
-			// Compare number of 'Modified' instances between slices
-			Collection<GKInstance> sliceInstanceModified = sliceInstance.getAttributeValuesList(ReactomeJavaConstants.modified);
-			Collection<GKInstance> prevSliceInstanceModified = prevSliceInstance.getAttributeValuesList(ReactomeJavaConstants.modified);
+			// Compare number of 'Update Tracker' instances between slices
+			Collection<GKInstance> sliceInstanceUpdateTracker = getUpdateTrackerInstances(sliceInstance);
+			Collection<GKInstance> prevSliceUpdateTracker = getUpdateTrackerInstances(prevSliceInstance);
 
-			if (sliceInstanceModified.size() < prevSliceInstanceModified.size()) {
+			if (sliceInstanceUpdateTracker.size() < prevSliceUpdateTracker.size()) {
 				String errorMessage =
-					sliceInstance + " in current release has less modification instances than previous release";
+					sliceInstance + " in current release has fewer update tracker instances than previous release";
 				logger.fatal(errorMessage);
 				throw new IllegalStateException(errorMessage);
 			}
 
-			if (sliceInstanceModified.size() > prevSliceInstanceModified.size()) {
+			if (sliceInstanceUpdateTracker.size() > prevSliceUpdateTracker.size()) {
 				boolean incrementSuccessful = attemptIncrementOfStableId(sliceInstance, gkCentralInstance, prevSliceInstance);
 				if (incrementSuccessful) {
 					incrementedCount++;
@@ -136,6 +136,11 @@ public class StableIdentifierUpdater {
 		sliceInstances.addAll(eventInstances);
 		sliceInstances.addAll(physicalEntityInstances);
 		return sliceInstances;
+	}
+
+	private List<GKInstance> getUpdateTrackerInstances(GKInstance instance) throws Exception {
+		Collection<GKInstance> updateTrackerInstances = instance.getReferers("updatedInstance");
+		return updateTrackerInstances != null ? new ArrayList<>(updateTrackerInstances) : new ArrayList<>();
 	}
 
 	private boolean attemptIncrementOfStableId(GKInstance sliceInstance, GKInstance gkCentralInstance, GKInstance prevSliceInstance) throws Exception {
