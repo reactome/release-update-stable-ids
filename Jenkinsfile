@@ -48,6 +48,7 @@ pipeline {
 				}
 			}
 		}
+		
 		// This stage backs up the gk_central database before it is modified.
 		stage('Setup: Back up Curator gk_central DB'){
 			steps{
@@ -58,14 +59,7 @@ pipeline {
 				}
 			}
 		}
-		// This stage builds the jar file using maven.
-		stage('Setup: Build jar files'){
-			steps{
-				script{
-					utils.buildJarFile()
-				}
-			}
-		}
+		
 		// This stage executes the UpdateStableIdentifiers jar file. It will go through all human stable identifier instances, comparing them between releases.
 		// Any that have an increase in the number of 'modified' instances between releases will be incremented in slice_current and gk_central (on the curator server).
 		stage('Main: Update Stable Identifiers'){
