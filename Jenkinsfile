@@ -8,7 +8,12 @@ def utils = new Utilities()
 
 pipeline {
 	agent any
-
+	
+	environment {
+            ECR_URL_BASE = 'public.ecr.aws/reactome'
+            MYSQL_SOCKET = '/var/run/mysqld/mysqld.sock'
+        }
+	
 	stages {
 		// This stage checks that an upstream project, ConfirmReleaseConfig, was run successfully for its last build.
 		stage('Check ConfirmReleaseConfig build succeeded'){
@@ -18,6 +23,7 @@ pipeline {
 				}
 			}
 		}
+		
 		// This stage moves 'slice_current' database to 'slice_previous', and then moves 'slice_test' to 'slice_current'.
 		// It also saves the slice_test dump as a snapshot, to be used in the next release.
 		stage('Setup: Rotate slice DBs'){
@@ -43,6 +49,7 @@ pipeline {
 				}
 			}
 		}
+		
 		// This stage backs up the gk_central database before it is modified.
 		stage('Setup: Back up Curator gk_central DB'){
 			steps{
@@ -53,59 +60,114 @@ pipeline {
 				}
 			}
 		}
-		// This stage builds the jar file using maven.
-		stage('Setup: Build jar files'){
-			steps{
-				script{
-					utils.buildJarFile()
-				}
-			}
-		}
+		
 		// This stage executes the UpdateStableIdentifiers jar file. It will go through all human stable identifier instances, comparing them between releases.
 		// Any that have an increase in the number of 'modified' instances between releases will be incremented in slice_current and gk_central (on the curator server).
 		stage('Main: Update Stable Identifiers'){
+			environment {
+		            ECR_URL = 'public.ecr.aws/reactome/release-update-stable-ids'
+		            CONT_NAME = 'release_update_stable_ids'
+		            CONT_ROOT = '/opt/release-update-stable-ids'
+	                }
+			
 			steps {
 				script{
+					sh "docker pull ${ECR_URL}:latest"
+				        sh """
+					    if docker ps -a --format '{{.Names}}' | grep -Eq '${CONT_NAME}'; then
+					    	docker rm -f ${CONT_NAME}
+					    fi
+				        """
+					
 					withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]){
-						sh "java -Xmx${env.JAVA_MEM_MAX}m -jar target/update-stable-ids-*-jar-with-dependencies.jar $ConfigFile"
+						sh "mkdir -p config"
+						sh "sudo cp $ConfigFile config/auth.properties"
+						sh "sudo chown jenkins:jenkins config/ -R"
+						sh """\
+					             docker run -v \$(pwd)/config:${CONT_ROOT}/config --net=host --name ${CONT_NAME} \\
+						     ${ECR_URL}:latest \\
+						     /bin/bash -c 'java -Xmx${env.JAVA_MEM_MAX}m -jar target/update-stable-ids-*-jar-with-dependencies.jar config/auth.properties'
+				                """
 					}
 				}
 			}
 		}
+		
 		// This stage runs StableIdentifier QA, which checks all stable ids in the database for valid formats.
 		// Currently this module comes from data-release-pipeline@feature/post-step-stid-history, but in
 		// the future will be moved to a QA repository, specific to release.
-		stage('Post: Build and run StableIdentifier QA') {
+		stage('Run Release QA') {
+			environment{
+			     ECR_URL = 'public.ecr.aws/reactome/release-qa'
+                             CONT_NAME = 'release_qa'
+                             CONT_ROOT = '/opt/release-qa/target'
+                        }
+			
 			steps{
 				script{
-					// Clone release-qa and run the StableIdentifierVersionMistmatch QA check
-				    	utils.cloneOrUpdateLocalRepo("release-qa")
+					sh "docker pull ${ECR_URL}:latest"
+				        sh """
+					    if docker ps -a --format '{{.Names}}' | grep -Eq '${CONT_NAME}'; then
+					    	docker rm -f ${CONT_NAME}
+					    fi
+				        """
+				    	sh "mkdir -p release-qa"
 					dir("release-qa") {
-						utils.buildJarFileWithPackage()
-						sh "ln -sf src/main/resources/ resources"
-
 						withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]){
-						    sh "cp -f $ConfigFile resources/auth.properties"
-						    sh "java -Xmx${env.JAVA_MEM_MAX}m -jar target/release-qa-*-exec.jar StableIdentifierVersionMismatchCheck"
-						    sh "rm resources/auth.properties"
+						    sh "mkdir -p config"
+						    sh "cp -f $ConfigFile config/auth.properties"
+						    sh "cp /home/awright/gitroot/release-qa/qa.properties config/"
+						    sh "mkdir -p output"
+						    sh "rm -f output/*"
+						    sh """\
+					               
+                                   docker run -v ${MYSQL_SOCKET}:${MYSQL_SOCKET} -v \$(pwd)/output:${CONT_ROOT}/output -v \$(pwd)/config:${CONT_ROOT}/mnt-config --net=host --name ${CONT_NAME} \\
+                                   ${ECR_URL_BASE}/release-qa:latest \\
+                                   /bin/bash -c 'cp /opt/release-qa/target/mnt-config/* resources/ && java -Xmx8G -jar release-qa-*-exec.jar StableIdentifierVersionMismatchCheck'
+                                """
+						    sh "rm config/auth.properties"
 						}
 				    
-				    	}
-					// Clone data-release-pipeline and checkout specific branch
-					utils.cloneOrUpdateLocalRepo("data-release-pipeline")
-					dir("data-release-pipeline") {
-				        
-						// Build and run QA jar file
-						dir("ortho-stable-id-history") {
-							utils.buildJarFile()
-							withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]) {
-								sh "java -jar target/OrthoStableIdHistory-*-jar-with-dependencies.jar $ConfigFile"
-							}
+				    }
+				}
+			}
+		}
+		
+		stage('Check Ortho Stable ID History') {
+			environment{
+			    ECR_URL = 'public.ecr.aws/reactome/release-ortho-stable-id-history'
+                CONT_NAME = 'release-ortho-stable-id-history-container'
+                CONT_ROOT = '/opt/release-ortho-stable-id-history'
+            }
+			
+			steps{
+				script{	
+					sh "docker pull ${ECR_URL}:latest"
+				        sh """
+					    if docker ps -a --format '{{.Names}}' | grep -Eq '${CONT_NAME}'; then
+					    	docker rm -f ${CONT_NAME}
+					    fi
+				        """
+					
+					sh "mkdir -p ortho-stable-id-history"
+					dir("ortho-stable-id-history") {
+						withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]) {
+							sh "mkdir -p config"
+						    sh "cp -f $ConfigFile config/auth.properties"
+						    sh "mkdir -p logs"
+						    sh "rm -f logs/*"
+							sh """\
+					                    docker run -v ${MYSQL_SOCKET}:${MYSQL_SOCKET} -v \$(pwd):${CONT_ROOT}/logs -v \$(pwd)/config:${CONT_ROOT}/config --net=host --name ${CONT_NAME} \\
+						            ${ECR_URL}:latest \\
+						            /bin/bash -c 'ls -l; java -jar target/OrthoStableIdHistory-*-SNAPSHOT-jar-with-dependencies.jar config/auth.properties'
+				                        """
+							sh "rm config/auth.properties"
 						}
 					}
 				}
 			}
 		}
+		
 		// This stage creates a new 'release_previous' database from the 'release_current' database,
 		// and takes the recently updated 'slice_current' database and creates a new 'release_current' one.
 		stage('Post: Rotate release DBs'){
@@ -157,10 +219,10 @@ pipeline {
 					
 					def dataFiles = ["release-qa/output/*"]
 					// Additional log files from post-step QA need to be pulled in
-					def logFiles = ["data-release-pipeline/ortho-stable-id-history/logs/*"]
+					def logFiles = ["ortho-stable-id-history/logs/*"]
 					// This folder is utilized for post-step QA. Jenkins creates multiple temporary directories
 					// cloning and checking out repositories, which is why the wildcard is added.
-					def foldersToDelete = ["data-release-pipeline*", "release-qa*", "${slice_final_folder}"]
+					def foldersToDelete = ["ortho-stable-id-history", "release-qa", "${slice_final_folder}"]
 					utils.cleanUpAndArchiveBuildFiles("update_stable_ids", dataFiles, logFiles, foldersToDelete)
 				}
 			}
