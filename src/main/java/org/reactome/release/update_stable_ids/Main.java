@@ -9,7 +9,7 @@ import java.util.Properties;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.gk.persistence.MySQLAdaptor;
+import org.reactome.server.service.persistence.Neo4JAdaptor;
 
 /**
  * This function iterates through all instances, and checks if it has been changed since the previous release.
@@ -24,13 +24,13 @@ public class Main {
 
 		Properties props = getProperties(getPathToConfigFile(args));
 
-		MySQLAdaptor dbaSlice = getCurrentSliceDBA(props);
-		MySQLAdaptor dbaPrevSlice = getPreviousSliceDBA(props);
-		MySQLAdaptor dbaGkCentral = getCuratorDBA(props);
+		Neo4JAdaptor dbaSlice = getCurrentSliceDBA(props);
+		Neo4JAdaptor dbaPrevSlice = getPreviousSliceDBA(props);
+		Neo4JAdaptor dbaGkCentral = getCuratorDBA(props);
 		long personId = Long.parseLong(props.getProperty("personId"));
 
-		StableIdentifierUpdater stableIdentifierUpdater = new StableIdentifierUpdater();
-		stableIdentifierUpdater.update(dbaSlice, dbaPrevSlice, dbaGkCentral, personId);
+		StableIdentifierUpdater stableIdentifierUpdater = new StableIdentifierUpdater(dbaSlice, dbaPrevSlice, dbaGkCentral, personId);
+		stableIdentifierUpdater.update();
 
 		logger.info("Finished UpdateStableIds step");
 	}
@@ -52,33 +52,32 @@ public class Main {
 		return Paths.get(pathToConfigFile);
 	}
 
-	private static MySQLAdaptor getCurrentSliceDBA(Properties props) throws SQLException {
+	private static Neo4JAdaptor getCurrentSliceDBA(Properties props) throws SQLException {
 		String databaseNameProperty = "slice_current.name";
 
 		return getReleaseDBA(props, databaseNameProperty);
 	}
 
-	private static MySQLAdaptor getPreviousSliceDBA(Properties props) throws SQLException {
+	private static Neo4JAdaptor getPreviousSliceDBA(Properties props) throws SQLException {
 		String databaseNameProperty = "slice_previous.name";
 
 		return getReleaseDBA(props, databaseNameProperty);
 	}
 
-	private static MySQLAdaptor getReleaseDBA(Properties props, String databaseNameProperty) throws SQLException {
+	private static Neo4JAdaptor getReleaseDBA(Properties props, String databaseNameProperty) throws SQLException {
 		final String propertyPrefix = "release.database";
 
 		return getDBA(props, propertyPrefix, databaseNameProperty);
 	}
 
-	private static MySQLAdaptor getCuratorDBA(Properties props) throws SQLException {
+	private static Neo4JAdaptor getCuratorDBA(Properties props) throws SQLException {
 		final String propertyPrefix = "curator.database";
 		final String databaseNameProperty = propertyPrefix + ".name";
 
 		return getDBA(props, propertyPrefix, databaseNameProperty);
 	}
 
-	private static MySQLAdaptor getDBA(Properties props, String propertyPrefix, String databaseNameProperty)
-		throws SQLException {
+	private static Neo4JAdaptor getDBA(Properties props, String propertyPrefix, String databaseNameProperty) {
 
 		String userName = props.getProperty(propertyPrefix + ".user");
 		String password = props.getProperty(propertyPrefix + ".password");
@@ -86,6 +85,7 @@ public class Main {
 		String databaseName = props.getProperty(databaseNameProperty);
 		int port = Integer.parseInt(props.getProperty(propertyPrefix + ".port"));
 
-		return new MySQLAdaptor(host, databaseName, userName, password, port);
+		String uri = String.format("bolt://%s:%d", host, port);
+		return new Neo4JAdaptor(uri, userName, password, databaseName);
 	}
 }

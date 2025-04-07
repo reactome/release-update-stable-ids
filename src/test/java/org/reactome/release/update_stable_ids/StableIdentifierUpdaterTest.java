@@ -1,8 +1,5 @@
 package org.reactome.release.update_stable_ids;
 
-import org.gk.model.GKInstance;
-import org.gk.persistence.MySQLAdaptor;
-import org.gk.schema.SchemaClass;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -14,6 +11,9 @@ import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.reactome.release.common.database.InstanceEditUtils;
 import org.powermock.modules.junit4.PowerMockRunner;
+import org.reactome.server.service.model.GKInstance;
+import org.reactome.server.service.persistence.Neo4JAdaptor;
+import org.reactome.server.service.schema.SchemaClass;
 
 import java.util.*;
 
@@ -26,9 +26,9 @@ import java.util.*;
 })
 public class StableIdentifierUpdaterTest {
 
-	private MySQLAdaptor mockSliceAdaptor = PowerMockito.mock(MySQLAdaptor.class);
-	private MySQLAdaptor mockPrevSliceAdaptor = PowerMockito.mock(MySQLAdaptor.class);
-	private MySQLAdaptor mockGkCentralAdaptor = PowerMockito.mock(MySQLAdaptor.class);
+	private Neo4JAdaptor mockSliceAdaptor = PowerMockito.mock(Neo4JAdaptor.class);
+	private Neo4JAdaptor mockPrevSliceAdaptor = PowerMockito.mock(Neo4JAdaptor.class);
+	private Neo4JAdaptor mockGkCentralAdaptor = PowerMockito.mock(Neo4JAdaptor.class);
 
 	@Mock
 	private GKInstance mockInstanceEdit;
