@@ -219,7 +219,7 @@ pipeline {
 					
 					def dataFiles = ["release-qa/output/*"]
 					// Additional log files from post-step QA need to be pulled in
-					def logFiles = ["ortho-stable-id-history/logs/*"]
+					def logFiles = []
 					// This folder is utilized for post-step QA. Jenkins creates multiple temporary directories
 					// cloning and checking out repositories, which is why the wildcard is added.
 					def foldersToDelete = ["ortho-stable-id-history", "release-qa", "${slice_final_folder}"]
