@@ -9,6 +9,7 @@ import org.gk.model.GKInstance;
 import org.gk.model.ReactomeJavaConstants;
 import org.gk.persistence.MySQLAdaptor;
 import org.gk.persistence.TransactionsNotSupportedException;
+import org.reactome.curation.model.SimpleInstance;
 import org.reactome.release.common.database.InstanceEditUtils;
 
 public class StableIdentifierUpdater {
@@ -17,26 +18,23 @@ public class StableIdentifierUpdater {
 
 	private MySQLAdaptor dbaSlice;
 	private MySQLAdaptor dbaPrevSlice;
-	private MySQLAdaptor dbaGKCentral;
+	private CuratorToolWSAPI curatorToolWSAPI;
 	private long personId;
 
 	private GKInstance sliceInstanceEdit;
 	private GKInstance gkCentralInstanceEdit;
 
 	public StableIdentifierUpdater(
-		MySQLAdaptor dbaSlice, MySQLAdaptor dbaPrevSlice, MySQLAdaptor dbaGkCentral, long personId) {
+		MySQLAdaptor dbaSlice, MySQLAdaptor dbaPrevSlice, CuratorToolWSAPI curatorToolWSAPI, long personId) {
 
 		this.dbaSlice = dbaSlice;
 		this.dbaPrevSlice = dbaPrevSlice;
-		this.dbaGKCentral = dbaGkCentral;
+		this.curatorToolWSAPI = curatorToolWSAPI;
 		this.personId = personId;
 	}
 
 	@SuppressWarnings("unchecked")
 	public void update() throws Exception {
-		startTransaction();
-		//TODO: Perl wrapper will create a 'snapshot' of the previous slice -- once the wrapper is retired this needs to be done
-
 		int incrementedCount = 0;
 		int notIncrementedCount = 0;
 
@@ -44,7 +42,7 @@ public class StableIdentifierUpdater {
 		logger.info("Total instances to check: " + sliceInstances.size());
 		for (GKInstance sliceInstance : sliceInstances) {
 			logger.info("Checking " + sliceInstance);
-			GKInstance gkCentralInstance = getDbaGKCentral().fetchInstance(sliceInstance.getDBID());
+			SimpleInstance gkCentralInstance = getCuratorToolWSAPI().findByDbId(sliceInstance.getDBID());
 			GKInstance prevSliceInstance = getDbaPrevSlice().fetchInstance(sliceInstance.getDBID());
 			// Check if instance is new and that it exists on gkCentral (they could be deleted)
 			if (prevSliceInstance == null || gkCentralInstance == null) {
@@ -96,7 +94,6 @@ public class StableIdentifierUpdater {
 				logger.error("Unable to check if {} was updated", sliceInstance, e);
 			}
 		}
-		commit();
 
 		logger.info(incrementedCount + " Stable Identifiers were updated");
 		logger.info(notIncrementedCount + " were not updated");
@@ -109,14 +106,6 @@ public class StableIdentifierUpdater {
 		}
 
 		return this.sliceInstanceEdit;
-	}
-
-	private GKInstance getGkCentralInstanceEdit() throws Exception {
-		if (this.gkCentralInstanceEdit == null) {
-			this.gkCentralInstanceEdit = getInstanceEdit(getDbaGKCentral());
-		}
-
-		return this.gkCentralInstanceEdit;
 	}
 
 	private GKInstance getInstanceEdit(MySQLAdaptor dbAdaptor) throws Exception {
@@ -143,12 +132,12 @@ public class StableIdentifierUpdater {
 		return updateTrackerInstances != null ? new ArrayList<>(updateTrackerInstances) : new ArrayList<>();
 	}
 
-	private boolean attemptIncrementOfStableId(GKInstance sliceInstance, GKInstance gkCentralInstance, GKInstance prevSliceInstance) throws Exception {
+	private boolean attemptIncrementOfStableId(GKInstance sliceInstance, SimpleInstance gkCentralInstance, GKInstance prevSliceInstance) throws Exception {
 		// Make sure StableIdentifier instance exists
-		if (sliceInstance.getAttributeValue(ReactomeJavaConstants.stableIdentifier) != null && gkCentralInstance.getAttributeValue(ReactomeJavaConstants.stableIdentifier) != null) {
+		if (sliceInstance.getAttributeValue(ReactomeJavaConstants.stableIdentifier) != null && gkCentralInstance.getAttribute(ReactomeJavaConstants.stableIdentifier) != null) {
 			logger.info("\tIncrementing " + sliceInstance.getAttributeValue(ReactomeJavaConstants.stableIdentifier));
 			incrementStableIdentifier(sliceInstance, getDbaSlice(), getSliceInstanceEdit());
-			incrementStableIdentifier(gkCentralInstance, getDbaGKCentral(), getGkCentralInstanceEdit());
+			incrementStableIdentifier(gkCentralInstance, getCuratorToolWSAPI());
 			return true;
 		} else if (sliceInstance.getAttributeValue(ReactomeJavaConstants.stableIdentifier) == null){
 			logger.warn(sliceInstance + ": could not locate StableIdentifier instance");
@@ -175,6 +164,20 @@ public class StableIdentifierUpdater {
 		dba.updateInstanceAttribute(stableIdentifierInst, ReactomeJavaConstants.modified);
 	}
 
+	private void incrementStableIdentifier(SimpleInstance instance, CuratorToolWSAPI curatorToolWSAPI) {
+		SimpleInstance stableIdentifierInst = (SimpleInstance) instance.getAttribute(ReactomeJavaConstants.stableIdentifier);
+		stableIdentifierInst = curatorToolWSAPI.findByDbId(stableIdentifierInst.getDbId()); // Inflate shell instance
+		String id = (String) stableIdentifierInst.getAttribute(ReactomeJavaConstants.identifier);
+		int idVersion = Integer.parseInt((String) stableIdentifierInst.getAttribute(ReactomeJavaConstants.identifierVersion));
+		int newIdentifierVersion = idVersion + 1;
+
+		stableIdentifierInst.setDefaultPersonId(getPersonId());
+		stableIdentifierInst.setAttribute(ReactomeJavaConstants.identifierVersion, String.valueOf(newIdentifierVersion));
+		stableIdentifierInst.setDisplayName(id + "." + newIdentifierVersion);
+
+		curatorToolWSAPI.commit(stableIdentifierInst);
+	}
+
 	// Checks via the 'releaseStatus', 'revised', and 'reviewed' attributes if this instance has been updated since last release.
 	// Also goes through any child 'hasEvent' instances and recursively checks as well.
 	private boolean isUpdated(GKInstance sliceInstance, GKInstance prevSliceInstance) throws Exception {
@@ -185,24 +188,6 @@ public class StableIdentifierUpdater {
 		return hasReleaseStatus(sliceInstance) ||
 			(recentlyRevised(sliceInstance, prevSliceInstance) || recentlyReviewed(sliceInstance, prevSliceInstance)) ||
 			(isPathway(sliceInstance) && anyChildEventInstancesUpdated(sliceInstance));
-	}
-
-	private void startTransaction() throws SQLException, TransactionsNotSupportedException {
-		// At time of writing (December 2018), test_slice is a non-transactional database.
-		// This check has been put in place as a safety net in case that changes.
-		if (getDbaSlice().supportsTransactions()) {
-			getDbaSlice().startTransaction();
-		}
-		getDbaGKCentral().startTransaction();
-	}
-
-	private void commit() throws SQLException {
-		// TODO: Update test_slice after gkCentral has been successfully updated
-		if (getDbaSlice().supportsTransactions()) {
-			getDbaSlice().commit();
-		}
-		logger.info("Commiting all changes in " + getDbaGKCentral().getDBName());
-		getDbaGKCentral().commit();
 	}
 
 	private boolean isEvent(GKInstance sliceInstance) {
@@ -260,8 +245,8 @@ public class StableIdentifierUpdater {
 		return this.dbaPrevSlice;
 	}
 
-	private MySQLAdaptor getDbaGKCentral() {
-		return this.dbaGKCentral;
+	private CuratorToolWSAPI getCuratorToolWSAPI() {
+		return this.curatorToolWSAPI;
 	}
 
 	private long getPersonId() {

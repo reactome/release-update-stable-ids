@@ -26,10 +26,11 @@ public class Main {
 
 		MySQLAdaptor dbaSlice = getCurrentSliceDBA(props);
 		MySQLAdaptor dbaPrevSlice = getPreviousSliceDBA(props);
-		MySQLAdaptor dbaGkCentral = getCuratorDBA(props);
+		CuratorToolWSAPI curatorToolWSAPI = getCuratorToolWSAPI(props);
+
 		long personId = Long.parseLong(props.getProperty("personId"));
 
-		StableIdentifierUpdater stableIdentifierUpdater = new StableIdentifierUpdater(dbaSlice, dbaPrevSlice, dbaGkCentral, personId);
+		StableIdentifierUpdater stableIdentifierUpdater = new StableIdentifierUpdater(dbaSlice, dbaPrevSlice, curatorToolWSAPI, personId);
 		stableIdentifierUpdater.update();
 
 		logger.info("Finished UpdateStableIds step");
@@ -70,11 +71,12 @@ public class Main {
 		return getDBA(props, propertyPrefix, databaseNameProperty);
 	}
 
-	private static MySQLAdaptor getCuratorDBA(Properties props) throws SQLException {
-		final String propertyPrefix = "curator.database";
-		final String databaseNameProperty = propertyPrefix + ".name";
+	private static CuratorToolWSAPI getCuratorToolWSAPI(Properties props) {
+		String hostURL = props.getProperty("curator.hostURL") ;
+		String curatorUserName = props.getProperty("curator.username");
+		String curatorPassword = props.getProperty("curator.password");
 
-		return getDBA(props, propertyPrefix, databaseNameProperty);
+		return new CuratorToolWSAPI(hostURL, curatorUserName, curatorPassword);
 	}
 
 	private static MySQLAdaptor getDBA(Properties props, String propertyPrefix, String databaseNameProperty)
