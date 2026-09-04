@@ -56,7 +56,7 @@ public class StableIdentifierUpdaterTest {
 	}
 
 	@Test
-	public void updateStableIdentifiersTest() throws Exception {
+	public void updateTest() throws Exception {
 
 		PowerMockito.mockStatic(InstanceEditUtils.class);
 
@@ -83,11 +83,13 @@ public class StableIdentifierUpdaterTest {
 		Mockito.when(mockInstance.getAttributeValuesList("reviewed")).thenReturn(sliceList);
 		Mockito.when(mockInstance2.getAttributeValuesList("reviewed")).thenReturn(sliceList2);
 
-		StableIdentifierUpdater.updateStableIdentifiers(mockSliceAdaptor, mockPrevSliceAdaptor, mockGkCentralAdaptor, 12345L);
+		StableIdentifierUpdater stableIdentifierUpdater =
+			new StableIdentifierUpdater(mockSliceAdaptor, mockPrevSliceAdaptor, mockGkCentralAdaptor, 12345L);
+		stableIdentifierUpdater.update();
 	}
 
 	@Test
-	public void updateStableIdentifiersModifiedListsWithSameSizeTest() throws Exception {
+	public void updateModifiedListsWithSameSizeTest() throws Exception {
 		PowerMockito.mockStatic(InstanceEditUtils.class);
 
 		sliceList = Arrays.asList(mockInstance);
@@ -105,6 +107,8 @@ public class StableIdentifierUpdaterTest {
 		Mockito.when(mockInstance.getSchemClass()).thenReturn(mockSchemaClass);
 		Mockito.when(mockInstance.getSchemClass().isa("Event")).thenReturn(false);
 
-		StableIdentifierUpdater.updateStableIdentifiers(mockSliceAdaptor, mockPrevSliceAdaptor, mockGkCentralAdaptor, 12345L);
+		StableIdentifierUpdater stableIdentifierUpdater =
+			new StableIdentifierUpdater(mockSliceAdaptor, mockPrevSliceAdaptor, mockGkCentralAdaptor, 12345L);
+		stableIdentifierUpdater.update();
 	}
 }
