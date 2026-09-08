@@ -8,12 +8,12 @@ def utils = new Utilities()
 
 pipeline {
 	agent any
-	
+
 	environment {
-            ECR_URL_BASE = 'public.ecr.aws/reactome'
-            MYSQL_SOCKET = '/var/run/mysqld/mysqld.sock'
-        }
-	
+		ECR_URL_BASE = 'public.ecr.aws/reactome'
+		MYSQL_SOCKET = '/var/run/mysqld/mysqld.sock'
+	}
+
 	stages {
 		// This stage checks that an upstream project, ConfirmReleaseConfig, was run successfully for its last build.
 		stage('Check ConfirmReleaseConfig build succeeded'){
@@ -23,7 +23,7 @@ pipeline {
 				}
 			}
 		}
-		
+
 		// This stage moves 'slice_current' database to 'slice_previous', and then moves 'slice_test' to 'slice_current'.
 		// It also saves the slice_test dump as a snapshot, to be used in the next release.
 		stage('Setup: Rotate slice DBs'){
@@ -49,125 +49,122 @@ pipeline {
 				}
 			}
 		}
-		
+
 		// This stage backs up the gk_central database before it is modified.
 		stage('Setup: Back up Curator gk_central DB'){
 			steps{
 				script{
-					withCredentials([usernamePassword(credentialsId: 'mySQLCuratorUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
-						utils.takeDatabaseDumpAndGzip("${env.GK_CENTRAL_DB}", "update_stable_ids", "before", "${env.CURATOR_SERVER}")
-					}
+					utils.backUpCuratorGraphDatabase(utils.getCuratorGraphConfig(), "update_stable_ids", "before")
 				}
 			}
 		}
-		
+
 		// This stage executes the UpdateStableIdentifiers jar file. It will go through all human stable identifier instances, comparing them between releases.
 		// Any that have an increase in the number of 'modified' instances between releases will be incremented in slice_current and gk_central (on the curator server).
 		stage('Main: Update Stable Identifiers'){
 			environment {
-		            ECR_URL = 'public.ecr.aws/reactome/release-update-stable-ids'
-		            CONT_NAME = 'release_update_stable_ids'
-		            CONT_ROOT = '/opt/release-update-stable-ids'
-	                }
-			
+				ECR_URL = 'public.ecr.aws/reactome/release-update-stable-ids'
+				CONT_NAME = 'release_update_stable_ids'
+				CONT_ROOT = '/opt/release-update-stable-ids'
+			}
+
 			steps {
 				script{
 					sh "docker pull ${ECR_URL}:latest"
-				        sh """
-					    if docker ps -a --format '{{.Names}}' | grep -Eq '${CONT_NAME}'; then
-					    	docker rm -f ${CONT_NAME}
-					    fi
-				        """
-					
+					sh """
+						if docker ps -a --format '{{.Names}}' | grep -Eq '${CONT_NAME}'; then
+							docker rm -f ${CONT_NAME}
+						fi
+					"""
+
 					withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]){
 						sh "mkdir -p config"
 						sh "sudo cp $ConfigFile config/auth.properties"
 						sh "sudo chown jenkins:jenkins config/ -R"
 						sh """\
-					             docker run -v \$(pwd)/config:${CONT_ROOT}/config --net=host --name ${CONT_NAME} \\
-						     ${ECR_URL}:latest \\
-						     /bin/bash -c 'java -Xmx${env.JAVA_MEM_MAX}m -jar target/update-stable-ids-*-jar-with-dependencies.jar config/auth.properties'
-				                """
+							 docker run -v \$(pwd)/config:${CONT_ROOT}/config --net=host --name ${CONT_NAME} \\
+							 ${ECR_URL}:latest \\
+							 /bin/bash -c 'java -Xmx${env.JAVA_MEM_MAX}m -jar target/update-stable-ids-*-jar-with-dependencies.jar config/auth.properties'
+						"""
 					}
 				}
 			}
 		}
-		
+
 		// This stage runs StableIdentifier QA, which checks all stable ids in the database for valid formats.
 		// Currently this module comes from data-release-pipeline@feature/post-step-stid-history, but in
 		// the future will be moved to a QA repository, specific to release.
 		stage('Run Release QA') {
 			environment{
-			     ECR_URL = 'public.ecr.aws/reactome/release-qa'
-                             CONT_NAME = 'release_qa'
-                             CONT_ROOT = '/opt/release-qa/target'
-                        }
-			
+				 ECR_URL = 'public.ecr.aws/reactome/release-qa'
+				 CONT_NAME = 'release_qa'
+				 CONT_ROOT = '/opt/release-qa/target'
+			}
+
 			steps{
 				script{
 					sh "docker pull ${ECR_URL}:latest"
-				        sh """
-					    if docker ps -a --format '{{.Names}}' | grep -Eq '${CONT_NAME}'; then
-					    	docker rm -f ${CONT_NAME}
-					    fi
-				        """
-				    	sh "mkdir -p release-qa"
+					sh """
+						if docker ps -a --format '{{.Names}}' | grep -Eq '${CONT_NAME}'; then
+							docker rm -f ${CONT_NAME}
+						fi
+					"""
+					sh "mkdir -p release-qa"
+
 					dir("release-qa") {
 						withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]){
-						    sh "mkdir -p config"
-						    sh "cp -f $ConfigFile config/auth.properties"
-						    sh "cp /home/awright/gitroot/release-qa/qa.properties config/"
-						    sh "mkdir -p output"
-						    sh "rm -f output/*"
-						    sh """\
-					               
-                                   docker run -v ${MYSQL_SOCKET}:${MYSQL_SOCKET} -v \$(pwd)/output:${CONT_ROOT}/output -v \$(pwd)/config:${CONT_ROOT}/mnt-config --net=host --name ${CONT_NAME} \\
-                                   ${ECR_URL_BASE}/release-qa:latest \\
-                                   /bin/bash -c 'cp /opt/release-qa/target/mnt-config/* resources/ && java -Xmx8G -jar release-qa-*-exec.jar StableIdentifierVersionMismatchCheck'
-                                """
-						    sh "rm config/auth.properties"
-						}
-				    
-				    }
-				}
-			}
-		}
-		
-		stage('Check Ortho Stable ID History') {
-			environment{
-			    ECR_URL = 'public.ecr.aws/reactome/release-ortho-stable-id-history'
-                CONT_NAME = 'release-ortho-stable-id-history-container'
-                CONT_ROOT = '/opt/release-ortho-stable-id-history'
-            }
-			
-			steps{
-				script{	
-					sh "docker pull ${ECR_URL}:latest"
-				        sh """
-					    if docker ps -a --format '{{.Names}}' | grep -Eq '${CONT_NAME}'; then
-					    	docker rm -f ${CONT_NAME}
-					    fi
-				        """
-					
-					sh "mkdir -p ortho-stable-id-history"
-					dir("ortho-stable-id-history") {
-						withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]) {
 							sh "mkdir -p config"
-						    sh "cp -f $ConfigFile config/auth.properties"
-						    sh "mkdir -p logs"
-						    sh "rm -f logs/*"
+							sh "cp -f $ConfigFile config/auth.properties"
+							sh "cp /home/awright/gitroot/release-qa/qa.properties config/"
+							sh "mkdir -p output"
+							sh "rm -f output/*"
 							sh """\
-					                    docker run -v ${MYSQL_SOCKET}:${MYSQL_SOCKET} -v \$(pwd):${CONT_ROOT}/logs -v \$(pwd)/config:${CONT_ROOT}/config --net=host --name ${CONT_NAME} \\
-						            ${ECR_URL}:latest \\
-						            /bin/bash -c 'ls -l; java -jar target/OrthoStableIdHistory-*-SNAPSHOT-jar-with-dependencies.jar config/auth.properties'
-				                        """
+							   docker run -v ${MYSQL_SOCKET}:${MYSQL_SOCKET} -v \$(pwd)/output:${CONT_ROOT}/output -v \$(pwd)/config:${CONT_ROOT}/mnt-config --net=host --name ${CONT_NAME} \\
+							   ${ECR_URL_BASE}/release-qa:latest \\
+							   /bin/bash -c 'cp /opt/release-qa/target/mnt-config/* resources/ && java -Xmx8G -jar release-qa-*-exec.jar StableIdentifierVersionMismatchCheck'
+							"""
 							sh "rm config/auth.properties"
 						}
 					}
 				}
 			}
 		}
-		
+
+		stage('Check Ortho Stable ID History') {
+			environment{
+				ECR_URL = 'public.ecr.aws/reactome/release-ortho-stable-id-history'
+				CONT_NAME = 'release-ortho-stable-id-history-container'
+				CONT_ROOT = '/opt/release-ortho-stable-id-history'
+			}
+
+			steps{
+				script{	
+					sh "docker pull ${ECR_URL}:latest"
+					sh """
+						if docker ps -a --format '{{.Names}}' | grep -Eq '${CONT_NAME}'; then
+							docker rm -f ${CONT_NAME}
+						fi
+					"""
+
+					sh "mkdir -p ortho-stable-id-history"
+					dir("ortho-stable-id-history") {
+						withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]) {
+							sh "mkdir -p config"
+							sh "cp -f $ConfigFile config/auth.properties"
+							sh "mkdir -p logs"
+							sh "rm -f logs/*"
+							sh """\
+								docker run -v ${MYSQL_SOCKET}:${MYSQL_SOCKET} -v \$(pwd):${CONT_ROOT}/logs -v \$(pwd)/config:${CONT_ROOT}/config --net=host --name ${CONT_NAME} \\
+								${ECR_URL}:latest \\
+								/bin/bash -c 'ls -l; java -jar target/OrthoStableIdHistory-*-SNAPSHOT-jar-with-dependencies.jar config/auth.properties'
+							"""
+							sh "rm config/auth.properties"
+						}
+					}
+				}
+			}
+		}
+
 		// This stage creates a new 'release_previous' database from the 'release_current' database,
 		// and takes the recently updated 'slice_current' database and creates a new 'release_current' one.
 		stage('Post: Rotate release DBs'){
@@ -180,28 +177,28 @@ pipeline {
 						def previousReleaseVersion = utils.getPreviousReleaseVersion()
 						def releaseCurrentDBToBeReplacedDumpName = "${env.RELEASE_CURRENT_DB}_${previousReleaseVersion}_final.dump"
 						utils.takeDatabaseDump("${env.RELEASE_CURRENT_DB}", "${releaseCurrentDBToBeReplacedDumpName}", "${env.RELEASE_SERVER}")
-				      		sh "gzip ${releaseCurrentDBToBeReplacedDumpName}"
+						sh "gzip ${releaseCurrentDBToBeReplacedDumpName}"
 						utils.replaceDatabase("${env.RELEASE_PREVIOUS_DB}", "${releaseCurrentDBToBeReplacedDumpName}.gz")
 						sh "rm ${releaseCurrentDBToBeReplacedDumpName}.gz"
 						
 						// Replace 'release_current' DB with updated 'slice_current' DB.
-				    		def releaseVersion = utils.getReleaseVersion()
+						def releaseVersion = utils.getReleaseVersion()
 						def sliceCurrentAfterStableIdUpdateDump = utils.takeDatabaseDumpAndGzip("${env.SLICE_CURRENT_DB}", "update_stable_ids", "after", "${env.RELEASE_SERVER}")
-				 		utils.replaceDatabase("${env.RELEASE_CURRENT_DB}", "${sliceCurrentAfterStableIdUpdateDump}")
+						utils.replaceDatabase("${env.RELEASE_CURRENT_DB}", "${sliceCurrentAfterStableIdUpdateDump}")
 					}
 				}
 			}
 		}
-		// This stage backs up the gk_central and slice_current databases after they have been modified.
+
+		// This stage backs up the gk_central database after they have been modified.
 		stage('Post: Back up Curator gk_central DB'){
 			steps{
 				script{
-					withCredentials([usernamePassword(credentialsId: 'mySQLCuratorUsernamePassword', passwordVariable: 'pass', usernameVariable: 'user')]){
-                        			utils.takeDatabaseDumpAndGzip("${env.GK_CENTRAL_DB}", "update_stable_ids", "after", "${env.CURATOR_SERVER}")
-					}
+					utils.backUpCuratorGraphDatabase(utils.getCuratorGraphConfig(), "update_stable_ids", "after")
 				}
 			}
 		}
+
 		// Archives logs and databases on S3, and then everything on the server.
 		stage('Post: Archive Outputs'){
 			steps{
