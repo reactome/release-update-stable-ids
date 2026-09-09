@@ -1,6 +1,5 @@
 package org.reactome.release.update_stable_ids;
 
-import java.sql.SQLException;
 import java.util.*;
 
 import org.apache.logging.log4j.LogManager;
@@ -8,7 +7,6 @@ import org.apache.logging.log4j.Logger;
 import org.gk.model.GKInstance;
 import org.gk.model.ReactomeJavaConstants;
 import org.gk.persistence.MySQLAdaptor;
-import org.gk.persistence.TransactionsNotSupportedException;
 import org.reactome.curation.model.SimpleInstance;
 import org.reactome.release.common.database.InstanceEditUtils;
 
@@ -22,7 +20,6 @@ public class StableIdentifierUpdater {
 	private long personId;
 
 	private GKInstance sliceInstanceEdit;
-	private GKInstance gkCentralInstanceEdit;
 
 	public StableIdentifierUpdater(
 		MySQLAdaptor dbaSlice, MySQLAdaptor dbaPrevSlice, CuratorToolWSAPI curatorToolWSAPI, long personId) {
