@@ -61,7 +61,8 @@ public class StableIdentifierUpdater {
 			}
 
 			if (sliceInstanceUpdateTracker.size() > prevSliceUpdateTracker.size()) {
-				boolean incrementSuccessful = attemptIncrementOfStableId(sliceInstance, gkCentralInstance, prevSliceInstance);
+				boolean incrementSuccessful =
+					attemptIncrementOfStableId(sliceInstance, gkCentralInstance, prevSliceInstance);
 				if (incrementSuccessful) {
 					incrementedCount++;
 				}
@@ -74,7 +75,8 @@ public class StableIdentifierUpdater {
 			try {
 				if (isUpdated(sliceInstance, prevSliceInstance)) {
 					logger.info("Checking if " + sliceInstance + " needs to be updated");
-					String releaseStatusString = (String) sliceInstance.getAttributeValue(ReactomeJavaConstants.releaseStatus);
+					String releaseStatusString =
+						(String) sliceInstance.getAttributeValue(ReactomeJavaConstants.releaseStatus);
 					String updated = "UPDATED";
 
 					if (releaseStatusString == null || !releaseStatusString.equals(updated)) {
@@ -129,9 +131,11 @@ public class StableIdentifierUpdater {
 		return updateTrackerInstances != null ? new ArrayList<>(updateTrackerInstances) : new ArrayList<>();
 	}
 
-	private boolean attemptIncrementOfStableId(GKInstance sliceInstance, SimpleInstance gkCentralInstance, GKInstance prevSliceInstance) throws Exception {
+	private boolean attemptIncrementOfStableId(
+		GKInstance sliceInstance, SimpleInstance gkCentralInstance, GKInstance prevSliceInstance) throws Exception {
 		// Make sure StableIdentifier instance exists
-		if (sliceInstance.getAttributeValue(ReactomeJavaConstants.stableIdentifier) != null && gkCentralInstance.getAttribute(ReactomeJavaConstants.stableIdentifier) != null) {
+		if (sliceInstance.getAttributeValue(ReactomeJavaConstants.stableIdentifier) != null &&
+			gkCentralInstance.getAttribute(ReactomeJavaConstants.stableIdentifier) != null) {
 			logger.info("\tIncrementing " + sliceInstance.getAttributeValue(ReactomeJavaConstants.stableIdentifier));
 			incrementStableIdentifier(sliceInstance, getDbaSlice(), getSliceInstanceEdit());
 			incrementStableIdentifier(gkCentralInstance, getCuratorToolWSAPI());
@@ -146,15 +150,21 @@ public class StableIdentifierUpdater {
 
 	// Increments the identifierVersion attribute and updates the StableIdentifier displayName accordingly.
 	// TODO: Integration Testing of increment function
-	private void incrementStableIdentifier(GKInstance instance, MySQLAdaptor dba, GKInstance instanceEdit) throws Exception {
-		GKInstance stableIdentifierInst = (GKInstance) instance.getAttributeValue(ReactomeJavaConstants.stableIdentifier);
+	private void incrementStableIdentifier(
+		GKInstance instance, MySQLAdaptor dba, GKInstance instanceEdit) throws Exception {
+
+		GKInstance stableIdentifierInst =
+			(GKInstance) instance.getAttributeValue(ReactomeJavaConstants.stableIdentifier);
 		String id = (String) stableIdentifierInst.getAttributeValue(ReactomeJavaConstants.identifier);
-		int idVersion = Integer.parseInt((String) stableIdentifierInst.getAttributeValue(ReactomeJavaConstants.identifierVersion));
+		int idVersion =
+			Integer.parseInt((String) stableIdentifierInst.getAttributeValue(ReactomeJavaConstants.identifierVersion));
 		int newIdentifierVersion = idVersion + 1;
 
-		stableIdentifierInst.addAttributeValue(ReactomeJavaConstants.identifierVersion, String.valueOf(newIdentifierVersion));
+		stableIdentifierInst.addAttributeValue(
+			ReactomeJavaConstants.identifierVersion, String.valueOf(newIdentifierVersion));
 		stableIdentifierInst.setDisplayName(id + "." + newIdentifierVersion);
-		Collection<GKInstance> modifiedInstances = (Collection<GKInstance>) stableIdentifierInst.getAttributeValuesList(ReactomeJavaConstants.modified);
+		Collection<GKInstance> modifiedInstances =
+			(Collection<GKInstance>) stableIdentifierInst.getAttributeValuesList(ReactomeJavaConstants.modified);
 		stableIdentifierInst.addAttributeValue(ReactomeJavaConstants.modified, instanceEdit);
 		dba.updateInstanceAttribute(stableIdentifierInst, ReactomeJavaConstants.identifierVersion);
 		dba.updateInstanceAttribute(stableIdentifierInst, ReactomeJavaConstants._displayName);
@@ -162,21 +172,24 @@ public class StableIdentifierUpdater {
 	}
 
 	private void incrementStableIdentifier(SimpleInstance instance, CuratorToolWSAPI curatorToolWSAPI) {
-		SimpleInstance stableIdentifierInst = (SimpleInstance) instance.getAttribute(ReactomeJavaConstants.stableIdentifier);
+		SimpleInstance stableIdentifierInst =
+			(SimpleInstance) instance.getAttribute(ReactomeJavaConstants.stableIdentifier);
 		stableIdentifierInst = curatorToolWSAPI.findByDbId(stableIdentifierInst.getDbId()); // Inflate shell instance
 		String id = (String) stableIdentifierInst.getAttribute(ReactomeJavaConstants.identifier);
-		int idVersion = Integer.parseInt((String) stableIdentifierInst.getAttribute(ReactomeJavaConstants.identifierVersion));
+		int idVersion =
+			Integer.parseInt((String) stableIdentifierInst.getAttribute(ReactomeJavaConstants.identifierVersion));
 		int newIdentifierVersion = idVersion + 1;
 
 		stableIdentifierInst.setDefaultPersonId(getPersonId());
-		stableIdentifierInst.setAttribute(ReactomeJavaConstants.identifierVersion, String.valueOf(newIdentifierVersion));
+		stableIdentifierInst.setAttribute(
+			ReactomeJavaConstants.identifierVersion, String.valueOf(newIdentifierVersion));
 		stableIdentifierInst.setDisplayName(id + "." + newIdentifierVersion);
 
 		curatorToolWSAPI.commit(stableIdentifierInst);
 	}
 
-	// Checks via the 'releaseStatus', 'revised', and 'reviewed' attributes if this instance has been updated since last release.
-	// Also goes through any child 'hasEvent' instances and recursively checks as well.
+	// Checks via the 'releaseStatus', 'revised', and 'reviewed' attributes if this instance has been updated since
+	// last release.  Also goes through any child 'hasEvent' instances and recursively checks as well.
 	private boolean isUpdated(GKInstance sliceInstance, GKInstance prevSliceInstance) throws Exception {
 		if (!isEvent(sliceInstance)) {
 			return false;
@@ -196,8 +209,10 @@ public class StableIdentifierUpdater {
 	}
 
 	private boolean recentlyRevised(GKInstance sliceInstance, GKInstance prevSliceInstance) throws Exception {
-		Collection<GKInstance> revisedInstances = sliceInstance.getAttributeValuesList(ReactomeJavaConstants.revised);
-		Collection<GKInstance> prevRevisedInstances = prevSliceInstance.getAttributeValuesList(ReactomeJavaConstants.revised);
+		Collection<GKInstance> revisedInstances =
+			sliceInstance.getAttributeValuesList(ReactomeJavaConstants.revised);
+		Collection<GKInstance> prevRevisedInstances =
+			prevSliceInstance.getAttributeValuesList(ReactomeJavaConstants.revised);
 
 		if (revisedInstances.size() > prevRevisedInstances.size()) {
 			return true;
@@ -206,8 +221,10 @@ public class StableIdentifierUpdater {
 	}
 
 	private boolean recentlyReviewed(GKInstance sliceInstance, GKInstance prevSliceInstance) throws Exception {
-		Collection<GKInstance> reviewedInstances = sliceInstance.getAttributeValuesList(ReactomeJavaConstants.reviewed);
-		Collection<GKInstance> prevReviewedInstances = prevSliceInstance.getAttributeValuesList(ReactomeJavaConstants.reviewed);
+		Collection<GKInstance> reviewedInstances =
+			sliceInstance.getAttributeValuesList(ReactomeJavaConstants.reviewed);
+		Collection<GKInstance> prevReviewedInstances =
+			prevSliceInstance.getAttributeValuesList(ReactomeJavaConstants.reviewed);
 		if (reviewedInstances.size() > prevReviewedInstances.size()) {
 			return true;
 		}
