@@ -2,12 +2,15 @@ package org.reactome.release.update_stable_ids;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
@@ -16,19 +19,29 @@ import org.reactome.curation.model.SimpleInstance;
 import org.reactome.curation.user.model.User;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.util.Base64;
 
 /**
  * @author Joel Weiser (joel.weiser@oicr.on.ca)
  * Created 9/18/2025
  */
 public class CuratorToolWSAPI {
+    // Treat the token as expired this many seconds early so a request can not be in flight when it lapses
+    private static final long EXPIRY_SKEW_SECONDS = 60L;
+
     private String hostURL;
+    private String userName;
+    private String password;
 
     private String jwtToken;
+    private Instant jwtExpiry;
 
     public CuratorToolWSAPI(String hostURL, String userName, String password) {
         this.hostURL = hostURL;
-        this.jwtToken = this.fetchJwtToken(userName, password);
+        this.userName = userName;
+        this.password = password;
+        refreshJwtToken();
     }
 
     public SimpleInstance commit(SimpleInstance simpleInstance) {
@@ -38,46 +51,80 @@ public class CuratorToolWSAPI {
         mapper.setVisibility(PropertyAccessor.GETTER, JsonAutoDetect.Visibility.NONE);
         mapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
 
-        try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+        try {
             HttpPost post = new HttpPost(getCommitURL());
             post.setHeader("Content-Type", "application/json");
-            post.setHeader("Authorization", "Bearer " + getJwtToken());
+            post.setEntity(new StringEntity(mapper.writeValueAsString(simpleInstance)));
 
-            String simpleInstanceJSON = mapper.writeValueAsString(simpleInstance);
-
-            post.setEntity(new StringEntity(simpleInstanceJSON));
-            HttpResponse response = httpClient.execute(post);
-            int statusCode = response.getStatusLine().getStatusCode();
-            if (statusCode != 200) {
-                throw new RuntimeException("Failed : HTTP error code : " + statusCode);
-            }
-
-            return mapper.readValue(EntityUtils.toString(response.getEntity()), SimpleInstance.class);
+            return mapper.readValue(executeAuthenticated(post), SimpleInstance.class);
         } catch (IOException e) {
             throw new RuntimeException("Error committing simple instance " + simpleInstance + " to API", e);
         }
     }
 
     public SimpleInstance findByDbId(long dbId) {
-        try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+        try {
             HttpGet request = new HttpGet(getFindByDbIdURL() + dbId);
             request.setHeader("Accept", "application/json");
-            request.setHeader("Authorization", "Bearer " + getJwtToken());
-            HttpResponse response = httpClient.execute(request);
-            int statusCode = response.getStatusLine().getStatusCode();
-            if (statusCode != 200) {
-                throw new RuntimeException("Failed : HTTP error code : " + statusCode);
-            }
-            String json = EntityUtils.toString(response.getEntity());
+
+            String json = executeAuthenticated(request);
             if (json == null || json.isEmpty()) {
                 return null;
             }
-            ObjectMapper objectMapper = new ObjectMapper();
-            return objectMapper.readValue(json, SimpleInstance.class);
+            return new ObjectMapper().readValue(json, SimpleInstance.class);
         }
         catch (Exception e) {
             throw new RuntimeException("Error fetching SimpleInstance from API", e);
         }
+    }
+
+    /**
+     * Executes the request with a valid bearer token, returning the response body.  The token is refreshed up front
+     * when it is at or near its expiry, and again if the server rejects it anyway (e.g. the server restarted with a
+     * new signing key, or its clock differs from ours), in which case the request is retried once.
+     */
+    private String executeAuthenticated(HttpRequestBase request) {
+        for (int attempt = 0; ; attempt++) {
+            try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+                request.setHeader("Authorization", "Bearer " + getJwtToken());
+
+                try (CloseableHttpResponse response = httpClient.execute(request)) {
+                    int statusCode = response.getStatusLine().getStatusCode();
+                    if (isAuthFailure(statusCode) && attempt == 0) {
+                        EntityUtils.consumeQuietly(response.getEntity());
+                        refreshJwtToken();
+                        continue;
+                    }
+                    if (statusCode != 200) {
+                        throw new RuntimeException("Failed : HTTP error code : " + statusCode);
+                    }
+                    return EntityUtils.toString(response.getEntity());
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Error executing request to " + request.getURI(), e);
+            }
+        }
+    }
+
+    private boolean isAuthFailure(int statusCode) {
+        return statusCode == 401 || statusCode == 403;
+    }
+
+    private synchronized String getJwtToken() {
+        if (this.jwtToken == null || isJwtTokenExpiring()) {
+            refreshJwtToken();
+        }
+        return this.jwtToken;
+    }
+
+    private synchronized boolean isJwtTokenExpiring() {
+        // A token whose expiry could not be determined is left to the retry in executeAuthenticated
+        return this.jwtExpiry != null && Instant.now().plusSeconds(EXPIRY_SKEW_SECONDS).isAfter(this.jwtExpiry);
+    }
+
+    private synchronized void refreshJwtToken() {
+        this.jwtToken = fetchJwtToken(getUserName(), getPassword());
+        this.jwtExpiry = getExpiry(this.jwtToken);
     }
 
     private String fetchJwtToken(String username, String password) {
@@ -96,15 +143,29 @@ public class CuratorToolWSAPI {
             if (jwt.startsWith("\"") && jwt.endsWith("\"")) {
                 jwt = jwt.substring(1, jwt.length() - 1);
             }
-            this.jwtToken = jwt;
             return jwt;
         } catch (Exception e) {
             throw new RuntimeException("Error fetching JWT token from API", e);
         }
     }
 
-    private String getJwtToken() {
-        return this.jwtToken;
+    /**
+     * Reads the "exp" claim from the token's payload.  The signature is not checked - the claim is used only to
+     * decide when to ask for a new token, never to decide that this token is trustworthy.
+     *
+     * @return the instant the token expires, or null if the token carries no readable expiry
+     */
+    private Instant getExpiry(String jwt) {
+        try {
+            String[] parts = jwt.split("\\.");
+            if (parts.length < 2) {
+                return null;
+            }
+            JsonNode expiry = new ObjectMapper().readTree(Base64.getUrlDecoder().decode(parts[1])).get("exp");
+            return expiry != null ? Instant.ofEpochSecond(expiry.asLong()) : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private String getAuthURL() {
@@ -121,5 +182,13 @@ public class CuratorToolWSAPI {
 
     private String getHostURL() {
         return this.hostURL;
+    }
+
+    private String getUserName() {
+        return this.userName;
+    }
+
+    private String getPassword() {
+        return this.password;
     }
 }
