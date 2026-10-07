@@ -2,6 +2,7 @@ package org.reactome.release.update_stable_ids;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -56,25 +57,61 @@ public class CuratorToolWSAPI {
             post.setHeader("Content-Type", "application/json");
             post.setEntity(new StringEntity(mapper.writeValueAsString(simpleInstance)));
 
-            return mapper.readValue(executeAuthenticated(post), SimpleInstance.class);
+            ExecutionResponse executionResponse = executeAuthenticated(post);
+            if (executionResponse.getResponseCode() != 200) {
+                throw new RuntimeException("Failed : HTTP error code : " + executionResponse.getResponseCode());
+            }
+            return mapper.readValue(executionResponse.getResponseEntity(), SimpleInstance.class);
         } catch (IOException e) {
             throw new RuntimeException("Error committing simple instance " + simpleInstance + " to API", e);
         }
     }
 
-    public SimpleInstance findByDbId(long dbId) {
+    public SimpleInstance findByDbId(long dbId) throws InstanceNotFoundException {
         try {
             HttpGet request = new HttpGet(getFindByDbIdURL() + dbId);
             request.setHeader("Accept", "application/json");
 
-            String json = executeAuthenticated(request);
+            ExecutionResponse executionResponse = executeAuthenticated(request);
+            int responseCode = executionResponse.getResponseCode();
+            if (responseCode == 404) {
+                throw new InstanceNotFoundException("Unable to find an instance in graph database for " + dbId);
+            } else if (responseCode != 200) {
+                throw new RuntimeException("Failed : HTTP error code : " + responseCode);
+            }
+
+            String json = executionResponse.getResponseEntity();
             if (json == null || json.isEmpty()) {
                 return null;
             }
             return new ObjectMapper().readValue(json, SimpleInstance.class);
         }
-        catch (Exception e) {
+        catch (JsonProcessingException e) {
             throw new RuntimeException("Error fetching SimpleInstance from API", e);
+        }
+    }
+
+    public static class InstanceNotFoundException extends Exception {
+        public InstanceNotFoundException(String message) {
+            super(message);
+        }
+    }
+
+    private static class ExecutionResponse {
+        private final String responseEntity;
+        private final int responseCode;
+
+        public ExecutionResponse(String responseEntity, int responseCode) {
+            this.responseEntity = responseEntity;
+            this.responseCode = responseCode;
+        }
+
+        public String getResponseEntity() {
+            return this.responseEntity;
+        }
+
+        public int getResponseCode() {
+            return this.responseCode;
         }
     }
 
@@ -83,7 +120,7 @@ public class CuratorToolWSAPI {
      * when it is at or near its expiry, and again if the server rejects it anyway (e.g. the server restarted with a
      * new signing key, or its clock differs from ours), in which case the request is retried once.
      */
-    private String executeAuthenticated(HttpRequestBase request) {
+    private ExecutionResponse executeAuthenticated(HttpRequestBase request) {
         for (int attempt = 0; ; attempt++) {
             try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
                 request.setHeader("Authorization", "Bearer " + getJwtToken());
@@ -95,10 +132,8 @@ public class CuratorToolWSAPI {
                         refreshJwtToken();
                         continue;
                     }
-                    if (statusCode != 200) {
-                        throw new RuntimeException("Failed : HTTP error code : " + statusCode);
-                    }
-                    return EntityUtils.toString(response.getEntity());
+
+                    return new ExecutionResponse(EntityUtils.toString(response.getEntity()),statusCode);
                 }
             } catch (IOException e) {
                 throw new RuntimeException("Error executing request to " + request.getURI(), e);

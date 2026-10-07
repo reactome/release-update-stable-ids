@@ -39,15 +39,8 @@ public class StableIdentifierUpdater {
 		logger.info("Total instances to check: " + sliceInstances.size());
 		for (GKInstance sliceInstance : sliceInstances) {
 			logger.info("Checking " + sliceInstance);
-			SimpleInstance gkCentralInstance = getCuratorToolWSAPI().findByDbId(sliceInstance.getDBID());
+
 			GKInstance prevSliceInstance = getDbaPrevSlice().fetchInstance(sliceInstance.getDBID());
-			// Check if instance is new and that it exists on gkCentral (they could be deleted)
-			if (prevSliceInstance == null || gkCentralInstance == null) {
-				if (gkCentralInstance == null) {
-					logger.warn(sliceInstance + " -- Instance not found in gkCentral");
-				}
-				continue;
-			}
 
 			// Compare number of 'Update Tracker' instances between slices
 			Collection<GKInstance> sliceInstanceUpdateTracker = getUpdateTrackerInstances(sliceInstance);
@@ -62,7 +55,7 @@ public class StableIdentifierUpdater {
 
 			if (sliceInstanceUpdateTracker.size() > prevSliceUpdateTracker.size()) {
 				boolean incrementSuccessful =
-					attemptIncrementOfStableId(sliceInstance, gkCentralInstance, prevSliceInstance);
+					attemptIncrementOfStableId(sliceInstance, prevSliceInstance);
 				if (incrementSuccessful) {
 					incrementedCount++;
 				}
@@ -131,8 +124,26 @@ public class StableIdentifierUpdater {
 		return updateTrackerInstances != null ? new ArrayList<>(updateTrackerInstances) : new ArrayList<>();
 	}
 
-	private boolean attemptIncrementOfStableId(
-		GKInstance sliceInstance, SimpleInstance gkCentralInstance, GKInstance prevSliceInstance) throws Exception {
+	private boolean attemptIncrementOfStableId(GKInstance sliceInstance, GKInstance prevSliceInstance)
+		throws Exception {
+
+		SimpleInstance gkCentralInstance;
+		try {
+			gkCentralInstance = getCuratorToolWSAPI().findByDbId(sliceInstance.getDBID());
+		} catch (CuratorToolWSAPI.InstanceNotFoundException e) {
+			logger.error(e.getMessage());
+			gkCentralInstance = null;
+		}
+
+		// Check if instance is new and that it exists on gkCentral (they could be deleted)
+		if (prevSliceInstance == null || gkCentralInstance == null) {
+			if (gkCentralInstance == null) {
+				logger.warn(sliceInstance + " -- Instance not found in gkCentral");
+			}
+			return false;
+		}
+
+
 		// Make sure StableIdentifier instance exists
 		if (sliceInstance.getAttributeValue(ReactomeJavaConstants.stableIdentifier) != null &&
 			gkCentralInstance.getAttribute(ReactomeJavaConstants.stableIdentifier) != null) {
@@ -171,7 +182,9 @@ public class StableIdentifierUpdater {
 		dba.updateInstanceAttribute(stableIdentifierInst, ReactomeJavaConstants.modified);
 	}
 
-	private void incrementStableIdentifier(SimpleInstance instance, CuratorToolWSAPI curatorToolWSAPI) {
+	private void incrementStableIdentifier(SimpleInstance instance, CuratorToolWSAPI curatorToolWSAPI)
+		throws CuratorToolWSAPI.InstanceNotFoundException {
+
 		SimpleInstance stableIdentifierInst =
 			(SimpleInstance) instance.getAttribute(ReactomeJavaConstants.stableIdentifier);
 		stableIdentifierInst = curatorToolWSAPI.findByDbId(stableIdentifierInst.getDbId()); // Inflate shell instance
