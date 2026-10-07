@@ -62,28 +62,14 @@ pipeline {
 		// This stage executes the UpdateStableIdentifiers jar file. It will go through all human stable identifier instances, comparing them between releases.
 		// Any that have an increase in the number of 'modified' instances between releases will be incremented in slice_current and gk_central (on the curator server).
 		stage('Main: Update Stable Identifiers'){
-			environment {
-				ECR_URL = 'public.ecr.aws/reactome/release-update-stable-ids'
-				CONT_NAME = 'release_update_stable_ids'
-				CONT_ROOT = '/opt/release-update-stable-ids'
-			}
-
 			steps {
 				script{
-					sh "docker pull ${ECR_URL}:latest"
-					sh """
-						if docker ps -a --format '{{.Names}}' | grep -Eq '${CONT_NAME}'; then
-							docker rm -f ${CONT_NAME}
-						fi
-					"""
-
 					withCredentials([file(credentialsId: 'Config', variable: 'ConfigFile')]){
 						sh "mkdir -p config"
 						sh "sudo cp $ConfigFile config/auth.properties"
 						sh "sudo chown jenkins:jenkins config/ -R"
+						sh "mvn clean package -DskipTests"
 						sh """\
-							 docker run -v \$(pwd)/config:${CONT_ROOT}/config --net=host --name ${CONT_NAME} \\
-							 ${ECR_URL}:latest \\
 							 /bin/bash -c 'java -Xmx${env.JAVA_MEM_MAX}m -jar target/update-stable-ids-*-jar-with-dependencies.jar config/auth.properties'
 						"""
 					}
