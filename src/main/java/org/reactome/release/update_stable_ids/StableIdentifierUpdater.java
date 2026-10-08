@@ -41,6 +41,10 @@ public class StableIdentifierUpdater {
 			logger.info("Checking " + sliceInstance);
 
 			GKInstance prevSliceInstance = getDbaPrevSlice().fetchInstance(sliceInstance.getDBID());
+			// Check if instance is new
+			if (prevSliceInstance == null) {
+				continue;
+			}
 
 			// Compare number of 'Update Tracker' instances between slices
 			Collection<GKInstance> sliceInstanceUpdateTracker = getUpdateTrackerInstances(sliceInstance);
@@ -135,14 +139,10 @@ public class StableIdentifierUpdater {
 			gkCentralInstance = null;
 		}
 
-		// Check if instance is new and that it exists on gkCentral (they could be deleted)
-		if (prevSliceInstance == null || gkCentralInstance == null) {
-			if (gkCentralInstance == null) {
-				logger.warn(sliceInstance + " -- Instance not found in gkCentral");
-			}
+		if (gkCentralInstance == null) {
+			logger.warn(sliceInstance + " -- Instance not found in gkCentral");
 			return false;
 		}
-
 
 		// Make sure StableIdentifier instance exists
 		if (sliceInstance.getAttributeValue(ReactomeJavaConstants.stableIdentifier) != null &&
